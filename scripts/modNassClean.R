@@ -42,9 +42,6 @@ ggplot(modDat, aes(x=fl)) +
   facet_grid(~factor(age))
 # looks good
 
-write.csv(modDat, "C:/Users/FRESHWATERC/Documents/SideProjects/histSockeye/privData/nassModernDataTrim.csv")
-
-
 
 ## ---------------------- Exploratory Comparisons With Contemporary ------------------------------
 fullDate <- as.Date(paste(nassDat$DAY, nassDat$MONTH, nassDat$retYr, sep="-"), format="%d-%m-%Y")
@@ -85,3 +82,4 @@ ggplot(nassFull, aes(x=jDay, fill=dataSet)) +
   facet_grid(~factor(age))
 
 
+## ---------------------- Add Environmental Data ------------------------------
