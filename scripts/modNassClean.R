@@ -10,7 +10,10 @@
 
 library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here)
 
+#work dir
 origModDat <- read.csv("C:/Users/FRESHWATERC/Documents/SideProjects/histSockeye/privData/nassModernData.csv", stringsAsFactors=F)
+#home dir
+origModDat <- read.csv("/Users/cam/cam\ stuff/Grad\ School/JuvSockeyeData/Analysis/data/nassModernData.csv", stringsAsFactors=F)
 nassDat <- read.csv(here("data/nassDat.csv"))
 
 ## ---------------------- Clean ------------------------------
