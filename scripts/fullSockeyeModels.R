@@ -13,54 +13,42 @@ library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here
 
 # fullHistDat <- read.csv(here("github/histSockeye/data/histSockDat.csv"), stringsAsFactors=F)
 # fullHistDat$pinkSE1<-(fullHistDat$pink_SE - mean(fullHistDat$pink_SE))/(sd(fullHistDat$pink_SE))
-sst <- read.table(here("github/histSockeye/data/scrnep.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
+sstPca <- read.table(here("github/histSockeye/data/scrnep.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
 # bSST<-read.csv(here("github/histSockeye/data/sst_broad.csv"), stringsAsFactors=F) # pacific ocean SST
 pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
 alpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
 # pink<-read.csv(here("github/histSockeye/data/pink.csv"), stringsAsFactors=F, header=TRUE)
-sockDat <- read.csv(here("github/histSockeye/data/histSockDatTrim.csv"), stringsAsFactors=F)
+sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
 
 ## ---------------------- Clean ------------------------------
 ### sst data
-colnames(sst) <- c("id", "yr", "month", "pc1", "pc2", "pc3", "pc4", "pc5")
+colnames(sstPca) <- c("id", "retYr", "month", "pc1", "pc2", "pc3", "pc4", "pc5")
 months <- c("3","4","5","6")
-sst <- sst[sst$month %in% months, c("yr","month","pc1")] 
-meanSst <- sst %>%
-	group_by(yr) %>%
-	summarise(meanPC1=mean(pc1))
+sstPca <- sstPca[sstPca$month %in% months, c("retYr","month","pc2")] 
+meanPca <- sstPca %>%
+	group_by(retYr) %>%
+	summarise(pc2=mean(pc2))
 
 ### pdo
-meanPdo <- data.frame(yr=pdo$YEAR,
+meanPdo <- data.frame(retYr=pdo$YEAR,
 					  pdo=apply(pdo[,c("MAR","APR","MAY","JUN")], 1, mean)
 					  )
+### alpi
+names(alpi)[1:2] <- c("retYr", "alpi")
 
 
+### merge sox data w/ environmental
+fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanPca, alpi))
 
-
-
-
-
-
-histDat <- fullHistDat[,c("watershed","retYr","entry.yr","WEIGHT_g","LENGTH_mm","AGE","K","PDOreturn1",
-	"ALPIreturn1","nSSTreturn1","bSSTreturn1","pinkSE1")]
-
-names(histDat)[c(3:6)] <- c("entryYr", "wt", "fl", "age")
-
-
-histDat$marAge <- ifelse(histDat$age=="1.3" | histDat$age=="2.3", 1, 0)
-histDat$marage <- as.factor(histDat$marage)
-histDat$watershed <- as.factor(histDat$watershed)
-histDat$age <- as.factor(histDat$age)
-histDat$retYr <- as.factor(histDat$retYr)
-
-nassDat <- subset(histDat,histDat$watershed %in% "nass")
-riversDat <- subset(histDat,histDat$watershed %in% "rivers")
-
-# nassDat <- read.csv("data/nassDat.csv", stringsAsFactors=F)
-# riversDat <- read.csv("data/riversDat.csv", stringsAsFactors=F)
+nassDat <- subset(fullDat, fullDat$watershed %in% "nass")
+nassDatMod <- subset(nassDat, nassDat$dataSet %in% "mod")
+nassDat <- subset(nassDat, nassDat$dataSet %in% "hist")
+riversDat <- subset(fullDat,fullDat$watershed %in% "rivers")
 
 nassDat$age <- factor(nassDat$age)
 nassDat$retYr <- factor(nassDat$retYr)
+nassDatMod$age <- factor(nassDatMod$age)
+nassDatMod$retYr <- factor(nassDatMod$retYr)
 riversDat$age <- factor(riversDat$age)
 riversDat$retYr <- factor(riversDat$retYr)
 
