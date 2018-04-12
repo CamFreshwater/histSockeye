@@ -20,6 +20,9 @@ trimCatch <- catchDatLong[,-1]
 colnames(trimCatch)[1:5] <- c("region", "area", "species", "fishery", "metric") 
 trimCatch$year <- as.factor(substring(trimCatch$year, 2)) #remove introduced x character
 trimCatch <- trimCatch[trimCatch$metric == "Number (000's)",] #remove biomass counts
+trimCatch$catch <- as.numeric(trimCatch$catch) * 1000
 trimCatch <- trimCatch[,-5] #remove metric column
 
+head(trimCatch)
+levels(as.factor(trimCatch$area))
 
