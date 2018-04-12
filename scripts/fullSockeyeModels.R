@@ -13,15 +13,15 @@ library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here
 
 # fullHistDat <- read.csv(here("github/histSockeye/data/histSockDat.csv"), stringsAsFactors=F)
 # fullHistDat$pinkSE1<-(fullHistDat$pink_SE - mean(fullHistDat$pink_SE))/(sd(fullHistDat$pink_SE))
-sstPca <- read.table(here("github/histSockeye/data/scrnep.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
-# bSST<-read.csv(here("github/histSockeye/data/sst_broad.csv"), stringsAsFactors=F) # pacific ocean SST
+sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
+sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean SST
 pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
-alpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
+meanAlpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
 # pink<-read.csv(here("github/histSockeye/data/pink.csv"), stringsAsFactors=F, header=TRUE)
 sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
 
 ## ---------------------- Clean ------------------------------
-### sst data
+### sst PCA
 colnames(sstPca) <- c("id", "retYr", "month", "pc1", "pc2", "pc3", "pc4", "pc5")
 months <- c("3","4","5","6")
 sstPca <- sstPca[sstPca$month %in% months, c("retYr","month","pc2")] 
@@ -29,16 +29,25 @@ meanPca <- sstPca %>%
 	group_by(retYr) %>%
 	summarise(pc2=mean(pc2))
 
+### sst raw
+colnames(sstRaw) <- c("long", "lat", "retYr", "month", "temp")
+months <- c("3","4","5","6")
+sstRaw <- sstRaw[sstRaw$month %in% months, c("retYr","month","temp")] 
+meanSst <- sstRaw %>%
+	group_by(retYr) %>%
+	summarise(temp=mean(temp))
+
 ### pdo
 meanPdo <- data.frame(retYr=pdo$YEAR,
 					  pdo=apply(pdo[,c("MAR","APR","MAY","JUN")], 1, mean)
 					  )
+
 ### alpi
-names(alpi)[1:2] <- c("retYr", "alpi")
+names(meanAlpi)[1:2] <- c("retYr", "alpi")
 
 
 ### merge sox data w/ environmental
-fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanPca, alpi))
+fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi))
 
 nassDat <- subset(fullDat, fullDat$watershed %in% "nass")
 nassDatMod <- subset(nassDat, nassDat$dataSet %in% "mod")
@@ -52,86 +61,31 @@ nassDatMod$retYr <- factor(nassDatMod$retYr)
 riversDat$age <- factor(riversDat$age)
 riversDat$retYr <- factor(riversDat$retYr)
 
+
 # -----------------------------------------------
-meanHist <- histDat %>%
-	group_by(retYr, watershed) %>%
-	summarize(meanFL = mean(fl), meanWt = mean(wt), meanK = mean(K), retPDO = mean(PDOreturn1),
-		retPink = mean(ALPIreturn1), retSSTn = mean(nSSTreturn1), retSSTb = mean(bSSTreturn1))
+meanDat <- fullDat %>%
+	group_by(retYr, age, watershed, dataSet) %>%
+	summarize(meanFL = mean(fl), pdo = mean(pdo), alpi = mean(alpi), 
+		rawSst = mean(temp), pcaSst = mean(pc2))
 
 ## Changes in length through time
-ggplot(meanHist[meanHist$watershed=="nass",], aes(x = as.numeric(retYr), y = meanFL)) + 
+ggplot(meanDat, aes(x = as.numeric(retYr), y = meanFL)) + 
     geom_line() + 
-    facet_wrap(~ age)
-ggplot(meanHist[meanHist$watershed=="rivers",], aes(x = as.numeric(retYr), y = meanFL)) + 
-    geom_line() + 
-    facet_wrap(~ age)
+    facet_wrap(~ watershed)
 
-
-meanNass <- meanHist[meanHist$watershed=="nass",c(1,3)]    
-meanRivers <- meanHist[meanHist$watershed=="rivers",c(1,3)]    
-
-plot(meanNass$meanFL ~ meanRivers$meanFL[-c(1,27,28,29)])
-
-
-# Plot changes in age structure through time
-temp <- nassDat[,c("retYr", "age")]
-temp2 <- prop.table(table(temp), 1)
-nassage <- as.data.frame(melt(temp2))
-names(nassage) <- c("retYr", "age", "ppn")
-
-temp <- riversDat[,c("retYr", "age")]
-temp2 <- prop.table(table(temp), 1)
-riversage <- as.data.frame(melt(temp2))
-names(riversage) <- c("retYr", "age", "ppn")
-
-pdf(here("NassRivers/figs/ageStruc.pdf"), height=4, width=4)
-ggplot(nassage, aes(x = retYr, y = ppn, fill = as.factor(age)))  +
-	geom_area(position = 'stack') +
-	xlab("Return Year") +
-	ylab("Proportion") +
-	scale_fill_discrete(name = "age")
-ggplot(riversage, aes(x = retYr, y = ppn, fill = as.factor(age))) +
-	geom_area(position = 'stack') +
-	xlab("Return Year") +
-	ylab("Proportion") +
-	scale_fill_discrete(name = "age")
-dev.off()
+meanNassDat <- meanDat[meanDat$watershed=="nass",]
+meanNassDat <- meanNassDat[meanNassDat$dataSet=="hist",]
 
 # -----------------------------------------------
 ## Initial model exploration to decide on structure
+ltNMod1 <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), data=nassDat, method="REML")
+ltNMod1b <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat, method="REML")
+ltNMod1c <- gam(fl ~ s(pdo, by=age, k=3) + age + s(retYr, bs="re"), data=nassDat, method="REML")
+ltNMod1d <- gam(meanFL ~ s(pdo, by=age, k=3) + age, data=meanNassDat, method="REML")
 
-# ltMod1 <- gamm(fl ~ s(PDOreturn1, by=watershed, k=3), random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=histDat)
-# ltMod1b <- gamm(fl ~ s(PDOreturn1, by=watershed, k=3), random=list(retYr = ~ 1), data=histDat)
-# ltMod1c <- gam(fl ~ s(PDOreturn1, by=watershed, k=3) + s(retYr, bs="re"), data=histDat, method="REML")
-# # ltMod1d <- gam(meanFL ~ s(retPDO, by=watershed, k=3), data=meanHist, method="REML")
-# ltMod1e <- gamm(fl ~ s(PDOreturn1, by=watershed, k=3) + watershed*age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=histDat)
-
-# AICc(ltMod1,ltMod1b,ltMod1c,ltMod1e)
-# # 1e superior; assume consistent across response variables
-
-# pacf(resid(ltMod1$lme, type = "normalized"))
-# pacf(resid(ltMod1e$gam, type = "deviance"))
-
-# gam.check(ltMod1e$gam) #check for normal residuals and equal variances
-
-# summary(ltMod1e) ## difficult estimating smoother significance and plotting with both watersheds in the same model
-# #######################################################
-# #######################################################
-
-## Separate and test for where age should be included
-
-ltNMod1 <- gamm(fl ~ s(PDOreturn1, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat)
-ltNMod1b <- gamm(fl ~ s(PDOreturn1, by=age, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat)
-ltNMod1c <- gamm(fl ~ s(PDOreturn1, by=age, k=3), random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat)
-ltRMod1 <- gamm(fl ~ s(PDOreturn1, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=riversDat)
-ltRMod1b <- gamm(fl ~ s(PDOreturn1, by=age, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=riversDat)
-ltRMod1c <- gamm(fl ~ s(PDOreturn1, by=age, k=3), random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=riversDat)
-
-AICc(ltNMod1,ltNMod1b,ltNMod1c)
-AICc(ltRMod1,ltRMod1b,ltRMod1c)
-# support for including age specific splines and fixed effects (i.e. b)
-
-
+acf(residuals(ltNMod1c))
+summary(ltNMod1c)
+summary(ltNMod1$lme)
 
 # ------------------------------------------------------
 ## Full model comparison with different environmental covariates; removed AR1 terms because they don't seem to be doing anything
