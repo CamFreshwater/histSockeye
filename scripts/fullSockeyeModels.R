@@ -11,14 +11,13 @@ setwd("/Users/cam/github")
 library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here)
 
 
-# fullHistDat <- read.csv(here("github/histSockeye/data/histSockDat.csv"), stringsAsFactors=F)
-# fullHistDat$pinkSE1<-(fullHistDat$pink_SE - mean(fullHistDat$pink_SE))/(sd(fullHistDat$pink_SE))
 sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
 sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean SST
 pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
 meanAlpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
-# pink<-read.csv(here("github/histSockeye/data/pink.csv"), stringsAsFactors=F, header=TRUE)
 sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
+catchDat <- read.csv(here("github/histSockeye/data/cleanAgCatch.csv"), stringsAsFactors=F)
+
 
 ## ---------------------- Clean ------------------------------
 ### sst PCA
@@ -45,6 +44,9 @@ meanPdo <- data.frame(retYr=pdo$YEAR,
 ### alpi
 names(meanAlpi)[1:2] <- c("retYr", "alpi")
 
+### catch
+sockCatch <- catchDat[catchDat$species=="Sockeye", -1]
+pinkCatch <- catchDat[catchDat$species=="Pink", -1]
 
 ### merge sox data w/ environmental
 fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi))
