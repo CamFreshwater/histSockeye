@@ -27,6 +27,7 @@ sstPca <- sstPca[sstPca$month %in% months, c("retYr","month","pc2")]
 meanPca <- sstPca %>%
 	group_by(retYr) %>%
 	summarise(pc2=mean(pc2))
+meanPca$pc2Std <- (meanPca$pc2 - mean(meanPca$pc2))/sd(meanPca$pc2)
 
 ### sst raw
 colnames(sstRaw) <- c("long", "lat", "retYr", "month", "temp")
@@ -35,21 +36,30 @@ sstRaw <- sstRaw[sstRaw$month %in% months, c("retYr","month","temp")]
 meanSst <- sstRaw %>%
 	group_by(retYr) %>%
 	summarise(temp=mean(temp))
+meanSst$tempStd <- (meanSst$temp - mean(meanSst$temp))/sd(meanSst$temp)
 
 ### pdo
 meanPdo <- data.frame(retYr=pdo$YEAR,
 					  pdo=apply(pdo[,c("MAR","APR","MAY","JUN")], 1, mean)
 					  )
+meanPdo$pdoStd <- (meanPdo$pdo - mean(meanPdo$pdo))/sd(meanPdo$pdo)
 
 ### alpi
 names(meanAlpi)[1:2] <- c("retYr", "alpi")
+meanAlpi$alpiStd <- (meanAlpi$alpi - mean(meanAlpi$alpi))/sd(meanAlpi$alpi)
 
 ### catch
-sockCatch <- catchDat[catchDat$species=="Sockeye", -1]
-pinkCatch <- catchDat[catchDat$species=="Pink", -1]
+sockCatch <- catchDat[catchDat$species=="Sockeye", -c(1,2,4)]
+names(sockCatch)[c(1,2)] <- c("retYr", "sockCatch")
+sockCatch$sockStd <- (sockCatch$sockCatch - mean(sockCatch$sockCatch))/sd(sockCatch$sockCatch)
+pinkCatch <- catchDat[catchDat$species=="Pink", -c(1,2,4)]
+names(pinkCatch)[c(1,2)] <- c("retYr", "pinkCatch")
+pinkCatch$pinkStd <- (pinkCatch$pinkCatch - mean(pinkCatch$pinkCatch))/sd(pinkCatch$pinkCatch)
+totalCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCatch + pinkCatch$pinkCatch))
+totalCatch$totalStd <- (totalCatch$totalCatch - mean(totalCatch$totalCatch))/sd(totalCatch$totalCatch)
 
 ### merge sox data w/ environmental
-fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi))
+fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi, sockCatch, pinkCatch, totalCatch))
 
 nassDat <- subset(fullDat, fullDat$watershed %in% "nass")
 nassDatMod <- subset(nassDat, nassDat$dataSet %in% "mod")
@@ -63,38 +73,70 @@ nassDatMod$retYr <- factor(nassDatMod$retYr)
 riversDat$age <- factor(riversDat$age)
 riversDat$retYr <- factor(riversDat$retYr)
 
+datList <- list(nassDat, nassDatMod, riversDat)
 
 # -----------------------------------------------
 meanDat <- fullDat %>%
 	group_by(retYr, age, watershed, dataSet) %>%
 	summarize(meanFL = mean(fl), pdo = mean(pdo), alpi = mean(alpi), 
-		rawSst = mean(temp), pcaSst = mean(pc2))
+		rawSst = mean(temp), pcaSst = mean(pc2), pink = mean(pinkCatch), 
+		sox = mean(sockCatch))
 
 ## Changes in length through time
 ggplot(meanDat, aes(x = as.numeric(retYr), y = meanFL)) + 
     geom_line() + 
     facet_wrap(~ watershed)
 
-meanNassDat <- meanDat[meanDat$watershed=="nass",]
-meanNassDat <- meanNassDat[meanNassDat$dataSet=="hist",]
+# meanNassDat <- meanDat[meanDat$watershed=="nass",]
+# meanNassDat <- meanNassDat[meanNassDat$dataSet=="hist",]
 
 # -----------------------------------------------
 ## Initial model exploration to decide on structure
-ltNMod1 <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), data=nassDat, method="REML")
-ltNMod1b <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat, method="REML")
-ltNMod1c <- gam(fl ~ s(pdo, by=age, k=3) + age + s(retYr, bs="re"), data=nassDat, method="REML")
-ltNMod1d <- gam(meanFL ~ s(pdo, by=age, k=3) + age, data=meanNassDat, method="REML")
+# ltNMod1 <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), data=nassDat, method="REML")
+# ltNMod1b <- gamm(fl ~ s(pdo, by=age, k=3) + age, random=list(retYr = ~ 1), correlation=corAR1(form = ~ 1|retYr), data=nassDat, method="REML")
+# ltNMod1c <- gam(fl ~ s(pdo, by=age, k=3) + age + s(retYr, bs="re"), data=nassDat, method="REML")
+# ltNMod1d <- gam(meanFL ~ s(pdo, by=age, k=3) + age, data=meanNassDat, method="REML")
 
-acf(residuals(ltNMod1c))
-summary(ltNMod1c)
-summary(ltNMod1$lme)
+# acf(residuals(ltNMod1c))
+# summary(ltNMod1c)
+# summary(ltNMod1$lme)
 
 # ------------------------------------------------------
 ## Full model comparison with different environmental covariates; removed AR1 terms because they don't seem to be doing anything
-# ctrl <- lmeControl(maxIter=500) #up max number of iterations to help difficult models converge
-# Nass
-nassDat$dum <- 1	
-ltNMod1 <- gam(fl ~ s(PDOreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
+fitGams <- function(dataset){
+	dataset$dum <- 1
+	
+	# models
+	null <- gam(fl ~ age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pdo <- gam(fl ~ s(pdoStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	temp <- gam(fl ~ s(tempStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pc2 <- gam(fl ~ s(pc2Std, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	alpi <- gam(fl ~ s(alpiStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pink <- gam(fl ~ s(pinkStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	sock <- gam(fl ~ s(sockStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	total <- gam(fl ~ s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pdoPink <- gam(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	tempPink <- gam(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pc2Pink <- gam(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	alpiPink <- gam(fl ~ s(alpiStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pdoSock <- gam(fl ~ s(pdoStd, by=age, k=3) + s(sockStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	tempSock <- gam(fl ~ s(tempStd, by=age, k=3) + s(sockStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pc2Sock <- gam(fl ~ s(pc2Std, by=age, k=3) + s(sockStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	alpiSock <- gam(fl ~ s(alpiStd, by=age, k=3) + s(sockStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pdoTotal <- gam(fl ~ s(pdoStd, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	tempTotal <- gam(fl ~ s(tempStd, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	pc2Total <- gam(fl ~ s(pc2Std, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+	alpiTotal <- gam(fl ~ s(alpiStd, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
+
+	#aic 
+	modRankings <- AICc(null, pdo, temp, pc2, alpi, pink, sock, total, pdoPink, tempPink, pc2Pink, alpiPink, 
+		pdoSock, tempSock, pc2Sock, alpiSock, pdoTotal, tempTotal, pc2Total, alpiTotal)
+	print(modRankings)
+}
+
+lapply(datList, function(x) fitGams(x))
+
+
 ltNMod2 <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
 ltNMod3 <- gam(fl ~ s(bSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
 ltNMod4 <- gam(fl ~ s(ALPIreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
