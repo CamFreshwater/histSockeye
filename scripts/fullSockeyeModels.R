@@ -8,7 +8,7 @@
 
 setwd("/Users/cam/github")
 
-library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here)
+library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here); library(MuMIn)
 
 
 sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
@@ -128,30 +128,22 @@ fitGams <- function(dataset){
 	pc2Total <- gam(fl ~ s(pc2Std, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
 	alpiTotal <- gam(fl ~ s(alpiStd, by=age, k=3) + s(totalStd, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=dataset)
 
-	#aic 
+	modOutputs <- list(null, pdo, temp, pc2, alpi, pink, sock, total, pdoPink, tempPink, pc2Pink, alpiPink, 
+		pdoSock, tempSock, pc2Sock, alpiSock, pdoTotal, tempTotal, pc2Total, alpiTotal)
+	names(modOutputs) <- c("null", "pdo", "temp", "pc2", "alpi", "pink", "sock", "total", "pdoPink", "tempPink", "pc2Pink", "alpiPink", "
+		pdoSock", "tempSock", "pc2Sock", "alpiSock", "pdoTotal", "tempTotal", "pc2Total", "alpiTotal")
+	return(assign(paste("fits", dataset$watershed[1], dataset$dataSet[1], sep="_"), modOutputs))
 	modRankings <- AICc(null, pdo, temp, pc2, alpi, pink, sock, total, pdoPink, tempPink, pc2Pink, alpiPink, 
 		pdoSock, tempSock, pc2Sock, alpiSock, pdoTotal, tempTotal, pc2Total, alpiTotal)
 	print(modRankings)
+	return(assign(paste("ranking", dataset$watershed[1], dataset$dataSet[1], sep="_"), modRankings))
 }
 
 lapply(datList, function(x) fitGams(x))
 
 
-ltNMod2 <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod3 <- gam(fl ~ s(bSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod4 <- gam(fl ~ s(ALPIreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod1b <- gam(fl ~ s(PDOreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod2b <- gam(fl ~ s(nSSTreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod3b <- gam(fl ~ s(bSSTreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod4b <- gam(fl ~ s(ALPIreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod1p <- gam(fl ~ s(PDOreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod2p <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod3p <- gam(fl ~ s(bSSTreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
-ltNMod4p <- gam(fl ~ s(ALPIreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=nassDat)
 
-AICc(ltNMod1,ltNMod2,ltNMod3,ltNMod4,ltNMod1b,ltNMod2b,ltNMod3b,ltNMod4b,
-	ltNMod1p,ltNMod2p,ltNMod3p,ltNMod4p)
-# top model is ltNMod2p nearshore and pink
+
 
 gam.check(ltNMod2p)
 acf(residuals(ltNMod2p), main = "") #no autocorrelation present in residuals
