@@ -16,7 +16,7 @@ sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean
 pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
 meanAlpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
 sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
-catchDat <- read.csv(here("github/histSockeye/data/cleanAgCatch.csv"), stringsAsFactors=F)
+catchDat <- read.csv(here("github/histSockeye/data/akCatch.csv"), stringsAsFactors=F)
 
 
 ## ---------------------- Clean ------------------------------
@@ -27,7 +27,6 @@ sstPca <- sstPca[sstPca$month %in% months, c("retYr","month","pc2")]
 meanPca <- sstPca %>%
 	group_by(retYr) %>%
 	summarise(pc2=mean(pc2))
-meanPca$pc2Std <- (meanPca$pc2 - mean(meanPca$pc2))/sd(meanPca$pc2)
 
 ### sst raw
 colnames(sstRaw) <- c("long", "lat", "retYr", "month", "temp")
@@ -36,27 +35,21 @@ sstRaw <- sstRaw[sstRaw$month %in% months, c("retYr","month","temp")]
 meanSst <- sstRaw %>%
 	group_by(retYr) %>%
 	summarise(temp=mean(temp))
-meanSst$tempStd <- (meanSst$temp - mean(meanSst$temp))/sd(meanSst$temp)
 
 ### pdo
 meanPdo <- data.frame(retYr=pdo$YEAR,
 					  pdo=apply(pdo[,c("MAR","APR","MAY","JUN")], 1, mean)
 					  )
-meanPdo$pdoStd <- (meanPdo$pdo - mean(meanPdo$pdo))/sd(meanPdo$pdo)
 
 ### alpi
 names(meanAlpi)[1:2] <- c("retYr", "alpi")
-meanAlpi$alpiStd <- (meanAlpi$alpi - mean(meanAlpi$alpi))/sd(meanAlpi$alpi)
 
 ### catch
 sockCatch <- catchDat[catchDat$species=="Sockeye", -c(1,2,4)]
 names(sockCatch)[c(1,2)] <- c("retYr", "sockCatch")
-sockCatch$sockStd <- (sockCatch$sockCatch - mean(sockCatch$sockCatch))/sd(sockCatch$sockCatch)
 pinkCatch <- catchDat[catchDat$species=="Pink", -c(1,2,4)]
 names(pinkCatch)[c(1,2)] <- c("retYr", "pinkCatch")
-pinkCatch$pinkStd <- (pinkCatch$pinkCatch - mean(pinkCatch$pinkCatch))/sd(pinkCatch$pinkCatch)
 totalCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCatch + pinkCatch$pinkCatch))
-totalCatch$totalStd <- (totalCatch$totalCatch - mean(totalCatch$totalCatch))/sd(totalCatch$totalCatch)
 
 ### merge sox data w/ environmental
 fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi, sockCatch, pinkCatch, totalCatch))
@@ -74,6 +67,20 @@ riversDat$age <- factor(riversDat$age)
 riversDat$retYr <- factor(riversDat$retYr)
 
 datList <- list(nassDat, nassDatMod, riversDat)
+
+standardizeVar <- function(x){
+	x$pc2Std <- (x$pc2 - mean(x$pc2))/sd(x$pc2)
+	x$tempStd <- (x$temp - mean(x$temp))/sd(x$temp)
+	x$pdoStd <- (x$pdo - mean(x$pdo))/sd(x$pdo)
+	x$alpiStd <- (x$alpi - mean(x$alpi))/sd(x$alpi)
+	x$sockStd <- (x$sockCatch - mean(x$sockCatch))/sd(x$sockCatch)
+	x$pinkStd <- (x$pinkCatch - mean(x$pinkCatch))/sd(x$pinkCatch)
+	x$totalStd <- (x$totalCatch - mean(x$totalCatch))/sd(x$totalCatch)
+	return(x)
+}
+
+datListN <- lapply(datList, function(x) standardizeVar(x))
+names(datListN) <- c("nassDat", "nassDatMod", "riversDat")
 
 # -----------------------------------------------
 meanDat <- fullDat %>%
@@ -103,7 +110,8 @@ ggplot(meanDat, aes(x = as.numeric(retYr), y = meanFL)) +
 
 # ------------------------------------------------------
 ## Full model comparison with different environmental covariates; removed AR1 terms because they don't seem to be doing anything
-fitGams <- function(dataset){
+for(i in seq_along(datListN)){
+	dataset <- datListN[[i]]
 	dataset$dum <- 1
 	
 	# models
@@ -130,69 +138,86 @@ fitGams <- function(dataset){
 
 	modOutputs <- list(null, pdo, temp, pc2, alpi, pink, sock, total, pdoPink, tempPink, pc2Pink, alpiPink, 
 		pdoSock, tempSock, pc2Sock, alpiSock, pdoTotal, tempTotal, pc2Total, alpiTotal)
-	names(modOutputs) <- c("null", "pdo", "temp", "pc2", "alpi", "pink", "sock", "total", "pdoPink", "tempPink", "pc2Pink", "alpiPink", "
-		pdoSock", "tempSock", "pc2Sock", "alpiSock", "pdoTotal", "tempTotal", "pc2Total", "alpiTotal")
-	return(assign(paste("fits", dataset$watershed[1], dataset$dataSet[1], sep="_"), modOutputs))
+	names(modOutputs)[1:length(modOutputs)] <- c("null", "pdo", "temp", "pc2", "alpi", "pink", "sock", "total", "pdoPink", "tempPink", "pc2Pink", "alpiPink", 
+		"pdoSock", "tempSock", "pc2Sock", "alpiSock", "pdoTotal", "tempTotal", "pc2Total", "alpiTotal")
+	assign(paste("fits", dataset$watershed[1], dataset$dataSet[1], sep="_"), modOutputs)
 	modRankings <- AICc(null, pdo, temp, pc2, alpi, pink, sock, total, pdoPink, tempPink, pc2Pink, alpiPink, 
 		pdoSock, tempSock, pc2Sock, alpiSock, pdoTotal, tempTotal, pc2Total, alpiTotal)
+	modRankings <- modRankings[order(modRankings$AICc),]
 	print(modRankings)
-	return(assign(paste("ranking", dataset$watershed[1], dataset$dataSet[1], sep="_"), modRankings))
+	assign(paste("ranking", dataset$watershed[1], dataset$dataSet[1], sep="_"), modRankings)
 }
 
-lapply(datList, function(x) fitGams(x))
+# extract top models 
+nmPc2Pink <- fits_nass_mod$pc2Pink
+nmPc2Sock <- fits_nass_mod$pc2Sock #equal support
+nhTempPink <- fits_nass_hist$tempPink
+nhPc2Pink <- fits_nass_hist$pc2Pink
+rhPdoPink <- fits_rivers_hist$pdoPink
+topModList <- list(nmPc2Pink, nhTempPink, rhPdoPink)
+names(topModList) <- c("N Mod", "N His", "R His")
 
+# check models
+sapply(topModList, function(x) gam.check(x))# some issues with modern model's qq plot, perhaps increase k?
+sapply(topModList, function(x) acf(residuals(x), main="")) #substantially more AC in modern model
 
-
-
-
-gam.check(ltNMod2p)
-acf(residuals(ltNMod2p), main = "") #no autocorrelation present in residuals
-plot(ltNMod2p$gam, all.terms=TRUE, rug=FALSE)
-plot_smooth(ltNMod2p, view="nSSTreturn1", plot_all="age", rm.ranef=TRUE,)
-summary(ltNMod2p$gam)
-summary(ltNMod2p$lme)
-
-
-# Rivers
-riversDat$dum <- 1
-ltRMod1 <- gam(fl ~ s(PDOreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod2 <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod3 <- gam(fl ~ s(bSSTreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod4 <- gam(fl ~ s(ALPIreturn1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod1b <- gam(fl ~ s(PDOreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod2b <- gam(fl ~ s(nSSTreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod3b <- gam(fl ~ s(bSSTreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod4b <- gam(fl ~ s(ALPIreturn1, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod1p <- gam(fl ~ s(PDOreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod2p <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod3p <- gam(fl ~ s(bSSTreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-ltRMod4p <- gam(fl ~ s(ALPIreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), method="ML", data=riversDat)
-
-AICc(ltRMod1,ltRMod2,ltRMod3,ltRMod4,ltRMod1b,ltRMod2b,ltRMod3b,ltRMod4b,
-	ltRMod1p,ltRMod2p,ltRMod3p,ltRMod4p)
-# top model is ltRMod1p (PDO and pink)
-
-gam.check(ltRMod1p$gam)
-acf(residuals(ltRMod1p$gam), main = "")
-plot(ltRMod1p$gam, all.terms=TRUE, rug=FALSE)
-plot_smooth(ltRMod1p$gam, view="PDOreturn1", plot_all="age", rm.ranef=TRUE,)
-summary(ltRMod1p$gam)
-summary(ltRMod1p$lme)
+plot(nmPc2Pink, all.terms=TRUE, rug=FALSE)
+plot(nhTempPink, all.terms=TRUE, rug=FALSE)
+plot(nmPc2Sock, all.terms=TRUE, rug=FALSE)
+plot(nhPc2Pink, all.terms=TRUE, rug=FALSE)
 
 
 
 # -------------------------Clean figures of predictions-----------------------------
 
-## Nass
-ltNMod2p <- gam(fl ~ s(nSSTreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), 
-	correlation=corAR1(form = ~ 1|retYr), data=nassDat, method="REML")
-## Mean response across SST, i.e. pink at mean
-newNTempDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
-					pinkSE1=rep(0, length=400),
-					nSSTreturn1=rep(seq(from=-2, to=2.5, length=100), times=4),
+## Nass modern (also look at sockeye model)
+## Mean response across PC2, i.e. pink at mean
+newNModTempDat <- data.frame(retYr=rep(unique(nassDatMod$retYr), length.out=400), 
+					pinkStd=rep(0, length=400),
+					pc2Std=rep(seq(from=-1.75, to=2.5, length=100), times=4),
 					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
 					dum=0)
-predNTempDat <- predict(ltNMod2p, newNTempDat, se.fit = TRUE)
+predNModTempDat <- predict(nmPc2Pink, newNModTempDat, se.fit = TRUE)
+predNModTempDat <- with(predNModTempDat, data.frame(newNModTempDat,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+
+## Mean response across pinks, i.e. PC2 at mean
+newNModPinkDat <- data.frame(retYr=rep(unique(nassDatMod$retYr), length.out=400), 
+					pc2Std=rep(0, length=400),
+					pinkStd=rep(seq(from=-1.5, to=3, length=100), times=4),
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
+					dum=0)
+predNModPinkDat <- predict(nmPc2Pink, newNModPinkDat, se.fit = TRUE)
+predNModPinkDat <- with(predNModPinkDat, data.frame(newNModPinkDat,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+
+nassModTempFig <- ggplot(predNModTempDat, aes(x = pc2Std, y = response, colour = age)) +
+geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
+geom_line(aes(colour = age)) +
+ylab("Fork Length") +
+xlab("Standardized Nearshore PC2") +
+ggtitle("Mod Nass PC2 Predictions")
+
+nassModPinkFig <- ggplot(predNModPinkDat, aes(x = pinkStd, y = response, colour = age)) +
+geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
+geom_line(aes(colour = age)) +
+ylab("Fork Length") +
+xlab("Standardized Pink Abundance") +
+ggtitle("Mod Nass Pink Salmon Predictions")
+
+
+## Nass historic (also look at sockeye model)
+## Mean response across temp, i.e. pink at mean
+newNTempDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
+					pinkStd=rep(0, length=400),
+					tempStd=rep(seq(from=-2.75, to=2.25, length=100), times=4),
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
+					dum=0)
+predNTempDat <- predict(nhTempPink, newNTempDat, se.fit = TRUE)
 predNTempDat <- with(predNTempDat, data.frame(newNTempDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
@@ -200,24 +225,24 @@ predNTempDat <- with(predNTempDat, data.frame(newNTempDat,
 
 ## Mean response across pinks, i.e. SST at mean
 newNPinkDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
-					nSSTreturn1=rep(0, length=400),
-					pinkSE1=rep(seq(from=-2, to=2.5, length=100), times=4),
+					tempStd=rep(0, length=400),
+					pinkStd=rep(seq(from=-1.5, to=3, length=100), times=4),
 					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
 					dum=0)
-predNPinkDat <- predict(ltNMod2p, newNPinkDat, se.fit = TRUE)
+predNPinkDat <- predict(nhTempPink, newNPinkDat, se.fit = TRUE)
 predNPinkDat <- with(predNPinkDat, data.frame(newNPinkDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
-nassTempFig <- ggplot(predNTempDat, aes(x = nSSTreturn1, y = response, colour = age)) +
+nassHistTempFig <- ggplot(predNTempDat, aes(x = tempStd, y = response, colour = age)) +
 geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
 geom_line(aes(colour = age)) +
 ylab("Fork Length") +
 xlab("Standardized Nearshore SST") +
 ggtitle("Nass SST Predictions")
 
-nassPinkFig <- ggplot(predNPinkDat, aes(x = pinkSE1, y = response, colour = age)) +
+nassHistPinkFig <- ggplot(predNPinkDat, aes(x = pinkStd, y = response, colour = age)) +
 geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
 geom_line(aes(colour = age)) +
 ylab("Fork Length") +
@@ -225,18 +250,14 @@ xlab("Standardized Pink Abundance") +
 ggtitle("Nass Pink Salmon Predictions")
 
 
-## Rivers
-riversDat$dum <- 1	
-ltRMod1pY <- gam(fl ~ s(PDOreturn1, by=age, k=3) + s(pinkSE1, by=age, k=3) + age + s(retYr, bs="re", by=dum), 
-	correlation=corAR1(form = ~ 1|retYr), data=riversDat, method="REML")
-
+## Rivers (historic)
 ## Mean response across SST, i.e. pink at mean
 newRPdoDat <- data.frame(retYr=rep(unique(riversDat$retYr), length.out=400), 
-					pinkSE1=rep(0, length=400),
-					PDOreturn1=rep(seq(from=-2, to=2.5, length=100), times=4),
+					pinkStd=rep(0, length=400),
+					pdoStd=rep(seq(from=-2.5, to=2, length=100), times=4),
 					age=rep(c("1.2", "1.3"), each=200),
 					dum=0)
-predRPdoDat <- predict(ltRMod1pY, newRPdoDat, se.fit = TRUE)
+predRPdoDat <- predict(rhPdoPink, newRPdoDat, se.fit = TRUE)
 predRPdoDat <- with(predRPdoDat, data.frame(newRPdoDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
@@ -244,24 +265,24 @@ predRPdoDat <- with(predRPdoDat, data.frame(newRPdoDat,
 
 ## Mean response across pinks, i.e. SST at mean
 newRPinkDat <- data.frame(retYr=rep(unique(riversDat$retYr), length.out=400), 
-					PDOreturn1=rep(0, length=400),
-					pinkSE1=rep(seq(from=-2, to=2.5, length=100), times=4),
+					pdoStd=rep(0, length=400),
+					pinkStd=rep(seq(from=-2.5, to=2, length=100), times=4),
 					age=rep(c("1.2", "1.3"), each=200),
 					dum=0)
-predRPinkDat <- predict(ltRMod1pY, newRPinkDat, se.fit = TRUE)
+predRPinkDat <- predict(rhPdoPink, newRPinkDat, se.fit = TRUE)
 predRPinkDat <- with(predRPinkDat, data.frame(newRPinkDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
-rivPdoFig <- ggplot(predRPdoDat, aes(x = PDOreturn1, y = response, colour = age)) +
+rivPdoFig <- ggplot(predRPdoDat, aes(x = pdoStd, y = response, colour = age)) +
 geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
 geom_line(aes(colour = age)) +
 ylab("Fork Length") +
-xlab("Stnadardized PDO") +
+xlab("Standardized PDO") +
 ggtitle("Rivers PDO Predictions")
 
-rivPinkFig <- ggplot(predRPinkDat, aes(x = pinkSE1, y = response, colour = age)) +
+rivPinkFig <- ggplot(predRPinkDat, aes(x = pinkStd, y = response, colour = age)) +
 geom_ribbon(aes(ymin = lwr, ymax = upr, fill = age), alpha = 0.1) +
 geom_line(aes(colour = age)) +
 ylab("Fork Length") +
@@ -270,10 +291,12 @@ ggtitle("Rivers Pink Salmon Predictions")
 
 
 # Save figures
-pdf(here("NassRivers/figs/predictions.pdf"), height=4, width=4)
+pdf(here("github/histSockeye/outputs/figs/predictions.pdf"), height=4, width=4)
 theme_set(theme_bw())
-nassTempFig
-nassPinkFig
+nassHistTempFig
+nassHistPinkFig
+nassModTempFig
+nassModPinkFig
 rivPdoFig
 rivPinkFig
 dev.off()

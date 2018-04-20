@@ -48,6 +48,8 @@ aggOldCatch$data <- "inpfc"
 fullCatch <- rbind(aggCatch, aggOldCatch)
 fullCatch[fullCatch$totalCatch == 0,]$totalCatch <- NA
 
+akCatch <- fullCatch[fullCatch$region == "Alaska", c(2,4,6,5)]
+
 agFullCatch <- fullCatch %>%
 	group_by(species, year, data) %>%
 	summarise(totalCatch = sum(totalCatch, na.rm=TRUE))
@@ -60,4 +62,5 @@ ggplot(agFullCatch, aes(x = as.numeric(year), y = totalCatch)) +
 
 
 write.csv(fullCatch, here("github/histSockeye/data/cleanCatch.csv"))
+write.csv(akCatch, here("github/histSockeye/data/akCatch.csv"))
 write.csv(agFullCatch, here("github/histSockeye/data/cleanAgCatch.csv"))
