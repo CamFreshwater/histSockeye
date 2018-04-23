@@ -26,10 +26,10 @@ trimCatch$catch <- as.numeric(trimCatch$catch) * 1000
 trimCatch <- trimCatch[,-5] #remove metric column
 trimCatch <- trimCatch[trimCatch$year > 1950,] #drop earlier years that will be redunant with INPFC
 trimCatch <- trimCatch[trimCatch$fishery == "Commercial",] #drop all fisheries except commercial to be consistent
-
+trimCatch <- trimCatch[,-4] #drop fishery column
 
 aggCatch <- trimCatch %>%
-	group_by(region, species, fishery, year) %>%
+	group_by(region, species, year) %>%
 	summarise(totalCatch = sum(catch, na.rm=TRUE))
 aggCatch$data <- "npafc"
 
@@ -39,20 +39,22 @@ oldCatchDat <- read.csv(here("github/histSockeye/data/rawCatchData/INPFC_CatchDa
 
 oldCatchDat$year <- as.numeric(oldCatchDat$year)
 oldCatchDat$catch <- as.numeric(oldCatchDat$catch)
+oldCatchDat <- oldCatchDat[,-4] #drop fishery column
 
 aggOldCatch <- oldCatchDat %>%
-	group_by(region, species, fishery, year) %>%
+	group_by(region, species, year) %>%
 	summarise(totalCatch = sum(catch, na.rm=TRUE))
 aggOldCatch$data <- "inpfc"
 
 fullCatch <- rbind(aggCatch, aggOldCatch)
 fullCatch[fullCatch$totalCatch == 0,]$totalCatch <- NA
 
-akCatch <- fullCatch[fullCatch$region == "Alaska", c(2,4,6,5)]
+akCatch <- fullCatch[fullCatch$region == "Alaska", c(2,3,5,4)]
 
 agFullCatch <- fullCatch %>%
 	group_by(species, year, data) %>%
 	summarise(totalCatch = sum(totalCatch, na.rm=TRUE))
+trimAgFullCatch <- agFullCatch[agFullCatch$year > 1920,]
 # agFullCatch[agFullCatch$totalCatch == 0,]$totalCatch <- NA
 
 # Catches line up well
@@ -63,4 +65,4 @@ ggplot(agFullCatch, aes(x = as.numeric(year), y = totalCatch)) +
 
 write.csv(fullCatch, here("github/histSockeye/data/cleanCatch.csv"))
 write.csv(akCatch, here("github/histSockeye/data/akCatch.csv"))
-write.csv(agFullCatch, here("github/histSockeye/data/cleanAgCatch.csv"))
+write.csv(trimAgFullCatch, here("github/histSockeye/data/cleanAgTrimCatch.csv"))
