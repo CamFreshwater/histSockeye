@@ -188,7 +188,7 @@ vif(nhTempPinkX$lme)
 vif(nmPc2PinkX$lme)
 
 
-# -------------------------Plot ts of length and predictors-----------------------------
+# Plot ts of length and predictors ---------------------------------------
 plotTS <- function(meanDat, dat){
 	temp <- data.frame(retYr = seq(from=min(dat$retYr), to=max(dat$retYr), by=1),
 		yrFac = as.factor(seq(from=min(dat$retYr), to=max(dat$retYr), by=1)))
@@ -231,7 +231,7 @@ dev.off()
 
 
 
-# -------------------------Clean figures of predictions-----------------------------
+# Clean figures of predictions -------------------------------------------
 
 ## Nass modern (also look at sockeye model)
 ## Mean response across PC2, i.e. pink at mean
@@ -424,8 +424,8 @@ nassModAgeFig
 dev.off()
 
 
-# -------------------------Truncated models-----------------------------
-# Truncated models to pass to Skip to compare w/ SST
+# Truncated models -------------------------------------------------------
+# Truncated models to pass to Skip to compare w/ SST (Mar. 25)
 nassDat$dum <- 1	
 ltNTrunc1 <- gam(fl ~ s(pinkSE1, by=age, k=3) + age + s(yrFac, bs="re", by=dum), 
 	correlation=corAR1(form = ~ 1|yrFac), data=nassDat, method="REML")
@@ -446,7 +446,63 @@ write.csv(riversDat, here("github/histSockeye/outputs/data/riversDatWResids.csv"
 
 
 
+# Out of sample predictions -------------------------------------------
+# Predict size in 1970s using top models for each dataset
 
+# Top models 
+nhTempPink <- gam(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+rhPdoPink <- gam(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
+				 method="REML", data=datListN$riversDat)
+nmPc2Pink <- gam(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
+			 	 method="REML", data=datListN$nassDatMod)
 
+# Dataset of predictors
+predDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(meanPdo, meanSst, meanPca, meanAlpi, pinkCatch))
+stdPredDat <- apply(predDat[,c(2:6)], 2, function(x) (x-mean(x))/sd(x))
+colnames(stdPredDat) <- c("pdoStd", "tempStd", "pc2Std", "alpiStd", "pinkStd")
+predDat <- cbind(predDat, stdPredDat)
+predYrs <- seq(from=1960, to=1980, by=1)
+trimPred <- predDat[predDat$retYr %in% predYrs,]
+trimPred <- rbind(trimPred, trimPred, trimPred, trimPred) #stack 4 high so that age variables can be added
+
+# Add necessary categorical variables
+trimPred$age <- as.factor(rep(c("1.2","1.3","2.2","2.3"), each=nrow(trimPred)/4))
+trimPred$yrFac <- as.factor("1935") #dummy variable found in original - model will average across yrs
+
+# Subset w/ appropriate years
+trimPredRiv <- trimPred[trimPred$age %in% c("1.2", "1.3"),] #necessary to drop 2 age classes from rivers
+trimPredRiv$age <- factor(trimPredRiv$age)
+trimPredNM <- trimPred
+trimPredNM$yrFac <- as.factor("1996") #dummy variable found in original - model will average across yrs 
+
+# Make predictions with each model
+riversPred <- predict(rhPdoPink, newdata=trimPredRiv, se.fit = TRUE, exclude = "s(yrFac)")
+riversPred <- with(riversPred, data.frame(trimPredRiv,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+
+nassPred <- predict(nhTempPink, newdata=trimPred, se.fit=TRUE, exclude="s(yrFac)")
+nassPred <- with(nassPred, data.frame(trimPred,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+nassModPred <- predict(nmPc2Pink, newdata=trimPredNM, se.fit=TRUE, exclude="s(yrFac)")
+nassModPred <- with(nassModPred, data.frame(trimPredNM,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+
+predList <- list(riversPred, nassPred, nassModPred)
+vars <- c("retYr", "pdo", "temp", "pc2", "alpi", "pinkCatch", "age", "response", "lwr", "upr")
+fileNames <- c("riversPred", "nassPred", "nassModPred")
+
+for(i in seq_along(predList)){
+	d <- predList[[i]][,vars]
+	names(d)[8] <- "predFL"
+	fileName <- fileNames[i]
+	write.csv(d, paste(here("github/histSockeye/outputs/data/"), fileName, ".csv", sep=""), row.names=FALSE)
+}
 
 

@@ -48,18 +48,18 @@ names(meanAlpi)[1:2] <- c("retYr", "alpi")
 trimAkCatch <- akCatchDat[akCatchDat$year > 1920, ]
 
 ## AK catch
-sockAkCatch <- trimCatch[trimCatch$species=="Sockeye", -c(1,2,4)]
+sockAkCatch <- trimAkCatch[trimAkCatch$species=="Sockeye", -c(1,2,4)]
 names(sockAkCatch)[c(1,2)] <- c("retYr", "sockCatch")
-pinkAkCatch <- trimCatch[trimCatch$species=="Pink", -c(1,2,4)]
+pinkAkCatch <- trimAkCatch[trimAkCatch$species=="Pink", -c(1,2,4)]
 names(pinkAkCatch)[c(1,2)] <- c("retYr", "pinkCatch")
-totalAkCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCatch + pinkCatch$pinkCatch))
+totalAkCatch <- data.frame(retYr = sockAkCatch$retYr, totalCatch = (sockAkCatch$sockCatch + pinkAkCatch$pinkCatch))
 
 ## full catch
 sockTotCatch <- trimTotCatch[trimCatch$species=="Sockeye", -c(1,2,4)]
 names(sockTotCatch)[c(1,2)] <- c("retYr", "sockCatch")
 pinkTotCatch <- trimCatch[trimCatch$species=="Pink", -c(1,2,4)]
 names(pinkTotCatch)[c(1,2)] <- c("retYr", "pinkCatch")
-totalCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCatch + pinkCatch$pinkCatch))
+totalCatch <- data.frame(retYr = sockTotCatch$retYr, totalCatch = (sockTotCatch$sockCatch + pinkTotCatch$pinkCatch))
 
 ### merge sox data w/ environmental
 #Ak data
@@ -172,8 +172,9 @@ fits_nass_hist <- readRDS(here("github/histSockeye/outputs/data/nassHistoricModF
 fits_rivers_hist <- readRDS(here("github/histSockeye/outputs/data/riversHistoricModFits.rds"))
 
 # extract top models 
-nmPc2Pink <- fits_nass_mod$pc2Pink
-nmPc2Sock <- fits_nass_mod$pc2Sock #equal support
+nmPc2Pink <- fitsAgg_nass_mod$pc2Pink
+nmPc2PinkAk <- fitsAk_nass_mod$pc2Pink
+
 nhTempPink <- fits_nass_hist$tempPink
 # nhPc2Pink <- fits_nass_hist$pc2Pink
 rhPdoPink <- fits_rivers_hist$pdoPink
