@@ -155,16 +155,21 @@ dev.off()
 # saveRDS(fits_rivers_hist, here("github/histSockeye/outputs/data/riversHistoricModFits.rds"))
 
 # read in data files
-fits_nass_mod <- readRDS(here("github/histSockeye/outputs/data/nassModernModFits.rds"))
-fits_nass_hist <- readRDS(here("github/histSockeye/outputs/data/nassHistoricModFits.rds"))
-fits_rivers_hist <- readRDS(here("github/histSockeye/outputs/data/riversHistoricModFits.rds"))
+# fits_nass_mod <- readRDS(here("github/histSockeye/outputs/data/nassModernModFits.rds"))
+# fits_nass_hist <- readRDS(here("github/histSockeye/outputs/data/nassHistoricModFits.rds"))
+# fits_rivers_hist <- readRDS(here("github/histSockeye/outputs/data/riversHistoricModFits.rds"))
 
 # extract top models 
-nmPc2Pink <- fits_nass_mod$pc2Pink
-nmPc2Sock <- fits_nass_mod$pc2Sock #equal support
-nhTempPink <- fits_nass_hist$tempPink
-# nhPc2Pink <- fits_nass_hist$pc2Pink
-rhPdoPink <- fits_rivers_hist$pdoPink
+nhTempPink <- gam(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+nhTemp <- gam(fl ~ s(tempStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+nhPink <- gam(fl ~ s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+rhPdoPink <- gam(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
+				 method="REML", data=datListN$riversDat)
+nmPc2Pink <- gam(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
+			 	 method="REML", data=datListN$nassDatMod)
 topModList <- list(nmPc2Pink, nhTempPink, rhPdoPink)
 names(topModList) <- c("N Mod", "N His", "R His")
 
@@ -235,36 +240,36 @@ dev.off()
 
 ## Nass modern (also look at sockeye model)
 ## Mean response across PC2, i.e. pink at mean
-newNModTempDat <- data.frame(retYr=rep(unique(nassDatMod$retYr), length.out=400), 
+newNModTempDat <- data.frame(yrFac=rep(unique(nassDatMod$yrFac), length.out=400), 
 					pinkStd=rep(0, length=400),
 					pc2Std=rep(seq(from=-1.75, to=2.5, length=100), times=4),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predNModTempDat <- predict(nmPc2Pink, newNModTempDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predNModTempDat <- predict(nmPc2Pink, newNModTempDat, se.fit = TRUE, exclude = "s(yrFac)")
 predNModTempDat <- with(predNModTempDat, data.frame(newNModTempDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean response across pinks, i.e. PC2 at mean
-newNModPinkDat <- data.frame(retYr=rep(unique(nassDatMod$retYr), length.out=400), 
+newNModPinkDat <- data.frame(yrFac=rep(unique(nassDatMod$yrFac), length.out=400), 
 					pc2Std=rep(0, length=400),
 					pinkStd=rep(seq(from=-1.5, to=3, length=100), times=4),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predNModPinkDat <- predict(nmPc2Pink, newNModPinkDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predNModPinkDat <- predict(nmPc2Pink, newNModPinkDat, se.fit = TRUE, exclude = "s(yrFac)")
 predNModPinkDat <- with(predNModPinkDat, data.frame(newNModPinkDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean age intercepts
-newNModAgeDat <- data.frame(retYr=rep(unique(nassDatMod$retYr), length.out=400), 
+newNModAgeDat <- data.frame(yrFac=rep(unique(nassDatMod$yrFac), length.out=400), 
 					pc2Std=rep(0, length=400),
 					pinkStd=rep(0, length=400),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predNModAgeDat <- predict(nmPc2Pink, newNModAgeDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predNModAgeDat <- predict(nmPc2Pink, newNModAgeDat, se.fit = TRUE, exclude = "s(yrFac)")
 predNModAgeDat <- with(predNModAgeDat, data.frame(newNModAgeDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
@@ -293,36 +298,36 @@ nassModAgeFig <- ggplot(predNModAgeDat, aes(x = age, y = response, ymin = lwr, y
 
 ## Nass historic (also look at sockeye model)
 ## Mean response across temp, i.e. pink at mean
-newNTempDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
+newNTempDat <- data.frame(yrFac=rep(unique(nassDat$yrFac), length.out=400), 
 					pinkStd=rep(0, length=400),
 					tempStd=rep(seq(from=-2.75, to=2.25, length=100), times=4),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predNTempDat <- predict(nhTempPink, newNTempDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predNTempDat <- predict(nhTempPink, newNTempDat, se.fit = TRUE, exclude = "s(yrFac)")
 predNTempDat <- with(predNTempDat, data.frame(newNTempDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean response across pinks, i.e. SST at mean
-newNPinkDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
+newNPinkDat <- data.frame(yrFac=rep(unique(nassDat$yrFac), length.out=400), 
 					tempStd=rep(0, length=400),
 					pinkStd=rep(seq(from=-1.5, to=3, length=100), times=4),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predNPinkDat <- predict(nhTempPink, newNPinkDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predNPinkDat <- predict(nhTempPink, newNPinkDat, se.fit = TRUE, exclude = "s(yrFac)")
 predNPinkDat <- with(predNPinkDat, data.frame(newNPinkDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean response across ages
-newAgeDat <- data.frame(retYr=rep(unique(nassDat$retYr), length.out=400), 
+newAgeDat <- data.frame(yrFac=rep(unique(nassDat$yrFac), length.out=400), 
 					tempStd=rep(0, length=400),
 					pinkStd=rep(0, length=400),
-					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100),
-					dum=0)
-predAgeDat <- predict(nhTempPink, newAgeDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3", "2.2", "2.3"), each=100)
+					)
+predAgeDat <- predict(nhTempPink, newAgeDat, se.fit = TRUE, exclude = "s(yrFac)")
 predAgeDat <- with(predAgeDat, data.frame(newAgeDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
@@ -352,36 +357,36 @@ nassAgeFig <- ggplot(predAgeDat, aes(x = age, y = response, ymin = lwr, ymax = u
 
 ## Rivers (historic)
 ## Mean response across SST, i.e. pink at mean
-newRPdoDat <- data.frame(retYr=rep(unique(riversDat$retYr), length.out=400), 
+newRPdoDat <- data.frame(yrFac=rep(unique(riversDat$yrFac), length.out=400), 
 					pinkStd=rep(0, length=400),
 					pdoStd=rep(seq(from=-2.5, to=2, length=100), times=4),
-					age=rep(c("1.2", "1.3"), each=200),
-					dum=0)
-predRPdoDat <- predict(rhPdoPink, newRPdoDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3"), each=200)
+					)
+predRPdoDat <- predict(rhPdoPink, newRPdoDat, se.fit = TRUE, exclude = "s(yrFac)")
 predRPdoDat <- with(predRPdoDat, data.frame(newRPdoDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean response across pinks, i.e. SST at mean
-newRPinkDat <- data.frame(retYr=rep(unique(riversDat$retYr), length.out=400), 
+newRPinkDat <- data.frame(yrFac=rep(unique(riversDat$yrFac), length.out=400), 
 					pdoStd=rep(0, length=400),
 					pinkStd=rep(seq(from=-2.5, to=2, length=100), times=4),
-					age=rep(c("1.2", "1.3"), each=200),
-					dum=0)
-predRPinkDat <- predict(rhPdoPink, newRPinkDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3"), each=200)
+					)
+predRPinkDat <- predict(rhPdoPink, newRPinkDat, se.fit = TRUE, exclude = "s(yrFac)")
 predRPinkDat <- with(predRPinkDat, data.frame(newRPinkDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
 ## Mean differences in age 
-newAgeDat <- data.frame(retYr=rep(unique(riversDat$retYr), length.out=400), 
+newAgeDat <- data.frame(yrFac=rep(unique(riversDat$yrFac), length.out=400), 
 					pdoStd=rep(0, length=400),
 					pinkStd=rep(0, length=400),
-					age=rep(c("1.2", "1.3"), each=200),
-					dum=0)
-predAgeDat <- predict(rhPdoPink, newAgeDat, se.fit = TRUE)
+					age=rep(c("1.2", "1.3"), each=200)
+					)
+predAgeDat <- predict(rhPdoPink, newAgeDat, se.fit = TRUE, exclude = "s(yrFac)")
 predAgeDat <- with(predAgeDat, data.frame(newAgeDat,
 								response = fit,
 								lwr = (fit - 2*se.fit),
@@ -457,6 +462,12 @@ rhPdoPink <- gam(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s
 nmPc2Pink <- gam(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
 			 	 method="REML", data=datListN$nassDatMod)
 
+nhTemp <- gam(fl ~ s(tempStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+nhPink <- gam(fl ~ s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datListN$nassDat)
+
+
 # Dataset of predictors
 predDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(meanPdo, meanSst, meanPca, meanAlpi, pinkCatch))
 stdPredDat <- apply(predDat[,c(2:6)], 2, function(x) (x-mean(x))/sd(x))
@@ -488,15 +499,25 @@ nassPred <- with(nassPred, data.frame(trimPred,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
+nassPredTemp <- predict(nhTemp, newdata=trimPred, se.fit=TRUE, exclude="s(yrFac)")
+nassPredTemp <- with(nassPredTemp, data.frame(trimPred,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
+nassPredPink <- predict(nhPink, newdata=trimPred, se.fit=TRUE, exclude="s(yrFac)")
+nassPredPink <- with(nassPredPink, data.frame(trimPred,
+								response = fit,
+								lwr = (fit - 2*se.fit),
+								upr = (fit + 2*se.fit)))
 nassModPred <- predict(nmPc2Pink, newdata=trimPredNM, se.fit=TRUE, exclude="s(yrFac)")
 nassModPred <- with(nassModPred, data.frame(trimPredNM,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
 
-predList <- list(riversPred, nassPred, nassModPred)
+predList <- list(riversPred, nassPred, nassModPred, nassPredPink, nassPredTemp)
 vars <- c("retYr", "pdo", "temp", "pc2", "alpi", "pinkCatch", "age", "response", "lwr", "upr")
-fileNames <- c("riversPred", "nassPred", "nassModPred")
+fileNames <- c("riversPred", "nassPred", "nassModPred", "nassPredPink", "nassPredTemp")
 
 for(i in seq_along(predList)){
 	d <- predList[[i]][,vars]
@@ -505,4 +526,6 @@ for(i in seq_along(predList)){
 	write.csv(d, paste(here("github/histSockeye/outputs/data/"), fileName, ".csv", sep=""), row.names=FALSE)
 }
 
-
+par(mfrow=c(2,2), oma=c(0,0,0,0)+0.1, mar=(4,4,0,0))
+trimList <- c(predList[[2]], predList[[4]], predList[[5]])
+sapply(trimList, function(x) hist(trimList$response))
