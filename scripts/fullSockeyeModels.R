@@ -12,6 +12,8 @@ library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here
 library(MuMIn); library(corrplot); library(car); library(mgcv.helper)
 
 
+source(here("github/histSockeye/scripts/histSockeyeFunc.R"))
+
 sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
 sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean SST
 pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
@@ -54,6 +56,7 @@ totalCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCa
 
 ### merge sox data w/ environmental
 fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi, sockCatch, pinkCatch, totalCatch))
+fullDat <- standardizeVar(fullDat)
 
 nassDat <- subset(fullDat, fullDat$watershed %in% "nass")
 nassDatMod <- subset(nassDat, nassDat$dataSet %in% "mod")
@@ -69,16 +72,6 @@ riversDat$yrFac <- factor(riversDat$retYr)
 
 datList <- list(nassDat, nassDatMod, riversDat)
 
-standardizeVar <- function(x){
-	x$pc2Std <- (x$pc2 - mean(x$pc2))/sd(x$pc2)
-	x$tempStd <- (x$temp - mean(x$temp))/sd(x$temp)
-	x$pdoStd <- (x$pdo - mean(x$pdo))/sd(x$pdo)
-	x$alpiStd <- (x$alpi - mean(x$alpi))/sd(x$alpi)
-	x$sockStd <- (x$sockCatch - mean(x$sockCatch))/sd(x$sockCatch)
-	x$pinkStd <- (x$pinkCatch - mean(x$pinkCatch))/sd(x$pinkCatch)
-	x$totalStd <- (x$totalCatch - mean(x$totalCatch))/sd(x$totalCatch)
-	return(x)
-}
 
 datListN <- lapply(datList, function(x) standardizeVar(x))
 names(datListN) <- c("nassDat", "nassDatMod", "riversDat")
@@ -456,16 +449,18 @@ write.csv(riversDat, here("github/histSockeye/outputs/data/riversDatWResids.csv"
 
 # Top models 
 nhTempPink <- gam(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+				  method="REML", data=datList$nassDat)
+nhTempPink <- gam(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
 				  method="REML", data=datListN$nassDat)
 rhPdoPink <- gam(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
-				 method="REML", data=datListN$riversDat)
+				 method="REML", data=datList$riversDat)
 nmPc2Pink <- gam(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"),
-			 	 method="REML", data=datListN$nassDatMod)
+			 	 method="REML", data=datList$nassDatMod)
 
-nhTemp <- gam(fl ~ s(tempStd, by=age, k=3) + age + s(yrFac, bs="re"), 
-				  method="REML", data=datListN$nassDat)
-nhPink <- gam(fl ~ s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
-				  method="REML", data=datListN$nassDat)
+# nhTemp <- gam(fl ~ s(tempStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+# 				  method="REML", data=datListN$nassDat)
+# nhPink <- gam(fl ~ s(pinkStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+# 				  method="REML", data=datListN$nassDat)
 
 
 # Dataset of predictors
@@ -504,20 +499,20 @@ nassPredTemp <- with(nassPredTemp, data.frame(trimPred,
 								response = fit,
 								lwr = (fit - 2*se.fit),
 								upr = (fit + 2*se.fit)))
-nassPredPink <- predict(nhPink, newdata=trimPred, se.fit=TRUE, exclude="s(yrFac)")
-nassPredPink <- with(nassPredPink, data.frame(trimPred,
-								response = fit,
-								lwr = (fit - 2*se.fit),
-								upr = (fit + 2*se.fit)))
-nassModPred <- predict(nmPc2Pink, newdata=trimPredNM, se.fit=TRUE, exclude="s(yrFac)")
-nassModPred <- with(nassModPred, data.frame(trimPredNM,
-								response = fit,
-								lwr = (fit - 2*se.fit),
-								upr = (fit + 2*se.fit)))
+# nassPredPink <- predict(nhPink, newdata=trimPred, se.fit=TRUE, exclude="s(yrFac)")
+# nassPredPink <- with(nassPredPink, data.frame(trimPred,
+# 								response = fit,
+# 								lwr = (fit - 2*se.fit),
+# 								upr = (fit + 2*se.fit)))
+# nassModPred <- predict(nmPc2Pink, newdata=trimPredNM, se.fit=TRUE, exclude="s(yrFac)")
+# nassModPred <- with(nassModPred, data.frame(trimPredNM,
+# 								response = fit,
+# 								lwr = (fit - 2*se.fit),
+# 								upr = (fit + 2*se.fit)))
 
-predList <- list(riversPred, nassPred, nassModPred, nassPredPink, nassPredTemp)
+predList <- list(riversPred, nassPred, nassModPred)
 vars <- c("retYr", "pdo", "temp", "pc2", "alpi", "pinkCatch", "age", "response", "lwr", "upr")
-fileNames <- c("riversPred", "nassPred", "nassModPred", "nassPredPink", "nassPredTemp")
+fileNames <- c("riversPredNewStd", "nassPredNewStd", "nassModPredNewStd")
 
 for(i in seq_along(predList)){
 	d <- predList[[i]][,vars]
