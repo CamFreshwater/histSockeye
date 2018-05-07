@@ -8,7 +8,8 @@
 
 setwd("/Users/cam/github")
 
-library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here); 
+library(here); 
+library(mgcv); library(dplyr); library(ggplot2); library(reshape2);
 library(MuMIn); library(corrplot); library(car); library(mgcv.helper)
 
 
@@ -90,20 +91,21 @@ par(mfrow=c(2,2), mar=c(0,0,2.75,0)+0.1, oma=c(0,0,0,0))
 sapply(datListN, function(x) makeCorPlot(x))
 dev.off()
 
-# -----------------------------------------------
-# meanDat <- fullDat %>%
-# 	group_by(yrFac, age, watershed, dataSet) %>%
-# 	summarize(meanFL = mean(fl), pdo = mean(pdo), alpi = mean(alpi), 
-# 		rawSst = mean(temp), pcaSst = mean(pc2), pink = mean(pinkCatch), 
-# 		sox = mean(sockCatch))
 
-# ## Changes in length through time
-# ggplot(meanDat, aes(x = as.numeric(yrFac), y = meanFL)) + 
-#     geom_line() + 
-#     facet_wrap(~ watershed)
+## ---------------------- Plot raw size trends ------------------------------
+meanDat <- fullDat %>%
+	group_by(retYr, age, watershed, dataSet) %>%
+	summarize(meanFL = mean(fl), pdo = mean(pdo), alpi = mean(alpi), 
+		rawSst = mean(temp), pcaSst = mean(pc2), pink = mean(pinkCatch), 
+		sox = mean(sockCatch))
 
-# Run with full dataset to see what environmental variable selected
-fullDat$dummy <- with(fullDat, interaction(watershed, dataSet))
+## Changes in length through time
+ggplot(meanDat[meanDat$dataSet=="hist",], aes(x = as.numeric(retYr), y = meanFL, col = as.factor(age))) + 
+    geom_point() + 
+    geom_smooth(method = "lm") +
+    facet_wrap(~ watershed)
+
+
 
 # ------------------------------------------------------
 ## Full model comparison with different environmental covariates; removed AR1 terms because they don't seem to be doing anything
@@ -187,17 +189,24 @@ nmPc2Sock <- gam(fl ~ s(pc2Std, by=age, k=3) + s(sockStd, by=age, k=3) + age + s
 
 
 ## Fit equivalent models with gamm so vif can be evaluated
-rhPdoPinkX <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$riversDat)
-nhTempPinkX <- gamm(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDat)
-nmPc2PinkX <- gamm(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDatMod)
-rhPdoSockX <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$riversDat)
-nhTempSockX <- gamm(fl ~ s(tempStd, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDat)
-nmPc2SockX <- gamm(fl ~ s(pc2Std, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDatMod)
+# rhPdoPinkAR <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, 
+# 	random=list(yrFac = ~1),  correlation = corAR1(form = ~ yrFac), method="REML", data=datListN$riversDat)
+# rhPdoPink <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, 
+# 	random=list(yrFac = ~1), method="REML", data=datListN$riversDat)
+# nhTempPink <- gamm(fl ~ s(tempStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, 
+# 	random=list(yrFac = ~1), method="REML", data=datListN$nassDat)
+# nmPc2Pink <- gamm(fl ~ s(pc2Std, by=age, k=3) + s(pinkStd, by=age, k=3) + age, 
+# 	random=list(yrFac = ~1), method="REML", data=datListN$nassDatMod)
+# # rhPdoSockX <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$riversDat)
+# # nhTempSockX <- gamm(fl ~ s(tempStd, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDat)
+# # nmPc2SockX <- gamm(fl ~ s(pc2Std, by=age, k=3) + s(sockStd, by=age, k=3) + age, random=list(yrFac = ~1), method="REML", data=datListN$nassDatMod)
 
-vif(rhPdoPinkX$lme)
-vif(nhTempPinkX$lme)
-vif(nmPc2PinkX$lme)
+# gam.check(rhPdoPink$gam)
+# gam.check(nhTempPink$gam)
+# gam.check(nmPc2Pink$gam)
 
+# acf(resid(nhTempPink$gam))
+# acf(resid(nhTempPink$lme))
 
 # Plot ts of length and predictors ---------------------------------------
 plotTS <- function(meanDat, dat){
@@ -537,7 +546,6 @@ for(i in seq_along(predList)){
 par(mfrow=c(2,2), oma=c(0,0,0,0)+0.1, mar=(4,4,0,0))
 trimList <- c(predList[[2]], predList[[4]], predList[[5]])
 sapply(trimList, function(x) hist(trimList$response))
-
 
 
 
