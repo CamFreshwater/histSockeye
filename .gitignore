@@ -19,5 +19,5 @@ knitr-cache
 hake-example.tex
 
 myNotes.*
-outputs/
+#outputs/
 .Rproj.user
