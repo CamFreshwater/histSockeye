@@ -99,13 +99,29 @@ meanDat <- fullDat %>%
 		rawSst = mean(temp), pcaSst = mean(pc2), pink = mean(pinkCatch), 
 		sox = mean(sockCatch))
 
+meanDat$dummy <- with(meanDat, interaction(watershed, dataSet))
+
 ## Changes in length through time
-ggplot(meanDat[meanDat$dataSet=="hist",], aes(x = as.numeric(retYr), y = meanFL, col = as.factor(age))) + 
-    geom_point() + 
-    geom_smooth(method = "lm") +
-    facet_wrap(~ watershed)
+index <- unique(meanDat$dummy)
+pdf(here("github/histSockeye/outputs/figs/linearTrends.pdf"), height=6, width=6)
+for(i in seq_along(index)) {
+	d <- meanDat[meanDat$dummy == index[i], ]
+	p <- ggplot(d, aes(x = as.numeric(retYr), y = meanFL, col = as.factor(age))) + 
+    	geom_point() + 
+    	geom_smooth(method = "lm") +
+    	ggtitle(index[i])
+    print(p)
+}
+dev.off()
 
-
+# meanDat$dummy <- with(meanDat, interaction(watershed, dataSet))
+pdf(here("github/histSockeye/outputs/figs/phenologyTrends.pdf"), height=6, width=6)
+sockDat$dummy <- with(sockDat, interaction(watershed, dataSet))
+ggplot(sockDat, aes(x = jDay, y = fl, col = as.factor(age))) + 
+    	# geom_point() + 
+    	geom_smooth(method = "lm") +
+    	facet_wrap(~dummy)
+dev.off()
 
 # ------------------------------------------------------
 ## Full model comparison with different environmental covariates; removed AR1 terms because they don't seem to be doing anything
