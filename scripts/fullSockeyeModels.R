@@ -6,21 +6,19 @@
 # and historical changes in sockeye body size
 # -------------------------------------------------
 
-setwd("/Users/cam/github")
-
 library(here); 
 library(mgcv); library(dplyr); library(ggplot2); library(reshape2);
 library(MuMIn); library(corrplot); library(car); library(mgcv.helper)
 
 
-source(here("github/histSockeye/scripts/histSockeyeFunc.R"))
+source(here::here("scripts/histSockeyeFunc.R"))
 
-sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
-sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean SST
-pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
-meanAlpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
-sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
-catchDat <- read.csv(here("github/histSockeye/data/akCatch.csv"), stringsAsFactors=F)
+sstPca <- read.table(here("data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
+sstRaw <- read.table(here("data/sstRaw.txt")) # pacific ocean SST
+pdo <- read.csv(here("data/pdo.csv"), stringsAsFactors=F) 
+meanAlpi <- read.csv(here("data/alpi.csv"), stringsAsFactors=F) #stops at 2015
+sockDat <- read.csv(here("data/nassFullSox.csv"), stringsAsFactors=F)
+catchDat <- read.csv(here("data/akCatch.csv"), stringsAsFactors=F)
 
 
 ## ---------------------- Clean ------------------------------
@@ -53,10 +51,14 @@ sockCatch <- catchDat[catchDat$species=="Sockeye", -c(1,2,4)]
 names(sockCatch)[c(1,2)] <- c("retYr", "sockCatch")
 pinkCatch <- catchDat[catchDat$species=="Pink", -c(1,2,4)]
 names(pinkCatch)[c(1,2)] <- c("retYr", "pinkCatch")
-totalCatch <- data.frame(retYr = sockCatch$retYr, totalCatch = (sockCatch$sockCatch + pinkCatch$pinkCatch))
+totalCatch <- data.frame(retYr = sockCatch$retYr, 
+                         totalCatch = (sockCatch$sockCatch + 
+                                         pinkCatch$pinkCatch))
 
 ### merge sox data w/ environmental
-fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), list(sockDat, meanPdo, meanSst, meanPca, meanAlpi, sockCatch, pinkCatch, totalCatch))
+fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")), 
+                  list(sockDat, meanPdo, meanSst, meanPca, meanAlpi, sockCatch, 
+                       pinkCatch, totalCatch))
 fullDat <- standardizeVar(fullDat)
 
 nassDat <- subset(fullDat, fullDat$watershed %in% "nass")

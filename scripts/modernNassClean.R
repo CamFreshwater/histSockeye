@@ -8,13 +8,12 @@
 # call to local directory
 # -------------------------------------------------
 
-library(mgcv); library(dplyr); library(ggplot2); library(reshape2); library(here)
+library(mgcv); library(dplyr); library(ggplot2); library(reshape2)
 
-#work dir
-# origModDat <- read.csv("C:/Users/FRESHWATERC/Documents/SideProjects/histSockeye/privData/nassModernData.csv", stringsAsFactors=F)
-#home dir
-origModDat <- read.csv("/Users/cam/cam\ stuff/Grad\ School/JuvSockeyeData/Analysis/NassRivers/data/nassModernData.csv", stringsAsFactors=F)
-histDatFull <- read.csv(here("github/histSockeye/data/histSockDat.csv"))
+origModDat <- read.csv(here::here("data", "nassModernData.csv"),
+                       stringsAsFactors=F)
+histDatFull <- read.csv(here::here("data", "histSockDat.csv"), 
+                        stringsAsFactors=F)
 
 ## ---------------------- Clean ------------------------------
 keepAges <- c("42", "52", "53", "63")
@@ -48,12 +47,13 @@ ggplot(modDat, aes(x=fl)) +
 
 
 ## ---------------------- Exploratory Comparisons With Contemporary ------------------------------
-fullDate <- as.Date(paste(histDatFull$DAY, histDatFull$MONTH, histDatFull$retYr, sep="-"), format="%d-%m-%Y")
+fullDate <- as.Date(paste(histDatFull$DAY, histDatFull$MONTH, histDatFull$retYr,
+                          sep="-"), format="%d-%m-%Y")
 jDay <- format(fullDate, "%j")
 histDat <- data.frame(retYr = as.numeric(histDatFull$retYr),
                       month = as.numeric(paste(0, histDatFull$MONTH, sep="")),
                       day = as.numeric(histDatFull$DAY),
-                      jDay = as.numeric(jDay)+6,
+                      jDay = as.numeric(jDay)+6, #add 6 days for transit time to inriver
                       sex = as.factor(histDatFull$SEX),
                       age = as.factor(histDatFull$AGE),
                       fl = histDatFull$LENGTH_mm,
@@ -62,7 +62,7 @@ histDat <- data.frame(retYr = as.numeric(histDatFull$retYr),
 soxFull <- rbind(modDat, histDat)
 soxFull$dataSet <- as.factor(ifelse(soxFull$retYr < 1950, "hist", "mod"))
 
-write.csv(soxFull, here("github/histSockeye/data/nassFullSox.csv"),  row.names=FALSE)
+# write.csv(soxFull, here::here("data, "nassFullSox.csv"),  row.names=FALSE)
 
 nassFull <- soxFull[soxFull$watershed == "nass", ]
 
@@ -70,7 +70,6 @@ nassFull <- soxFull[soxFull$watershed == "nass", ]
 ggplot(nassFull, aes(x = as.numeric(retYr), y = fl, colour=dataSet)) + 
   geom_line() + 
   facet_wrap(~ age)
-
 
 # Changes in age at maturity
 temp <- nassFull[,c("retYr", "age")]
@@ -83,8 +82,8 @@ ggplot(nassAge, aes(x = retYr, y = ppn, fill = as.factor(age)))  +
   ylab("Proportion") +
   scale_fill_discrete(name = "age")
 
-
 # Return timing
+# (ASSUMES adding six days to landing date makes it equivalent to fish wheel)
 ggplot(nassFull, aes(x=jDay, fill=dataSet)) +
   geom_histogram(position="identity", colour="grey40", alpha=0.2) +
   facet_grid(~factor(age))
