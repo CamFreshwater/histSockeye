@@ -6,21 +6,18 @@
 # and historical changes in sockeye body size
 # -------------------------------------------------
 
-setwd("/Users/cam/github")
-
-library(here); 
-library(mgcv); library(dplyr); library(ggplot2); library(reshape2);
-library(MuMIn); library(corrplot); library(car); library(mgcv.helper)
+library(mgcv); library(tidyverse); library(ggplot2); library(reshape2);
+library(car); library(mgcv.helper)
 
 
-source(here("github/histSockeye/scripts/histSockeyeFunc.R"))
+source(here::here("scripts/histSockeyeFunc.R"))
 
-sstPca <- read.table(here("github/histSockeye/data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
-sstRaw <- read.table(here("github/histSockeye/data/sstRaw.txt")) # pacific ocean SST
-pdo <- read.csv(here("github/histSockeye/data/pdo.csv"), stringsAsFactors=F) 
-meanAlpi <- read.csv(here("github/histSockeye/data/alpi.csv"), stringsAsFactors=F) #stops at 2015
-sockDat <- read.csv(here("github/histSockeye/data/nassFullSox.csv"), stringsAsFactors=F)
-catchDat <- read.csv(here("github/histSockeye/data/akCatch.csv"), stringsAsFactors=F)
+sstPca <- read.table(here::here("data/sstPCA.txt")) #principal components of SST variation in NE Pacific (170E to 240E, 40N-65N)
+sstRaw <- read.table(here::here("data/sstRaw.txt")) # pacific ocean SST
+pdo <- read.csv(here::here("data/pdo.csv"), stringsAsFactors=F) 
+meanAlpi <- read.csv(here::here("data/alpi.csv"), stringsAsFactors=F) #stops at 2015
+sockDat <- read.csv(here::here("data/nassFullSox.csv"), stringsAsFactors=F)
+catchDat <- read.csv(here::here("data/akCatch.csv"), stringsAsFactors=F)
 
 
 ## ---------------------- Clean ------------------------------
@@ -86,7 +83,7 @@ makeCorPlot <- function(df){
 	mtext(side=3, line=1.5, figTitle, cex=1.2)
 }
 
-pdf(here("github/histSockeye/outputs/figs/corrPlot.pdf"), height=10, width=10)
+pdf(here::here("outputs/figs/corrPlot.pdf"), height=10, width=10)
 par(mfrow=c(2,2), mar=c(0,0,2.75,0)+0.1, oma=c(0,0,0,0))
 sapply(datListN, function(x) makeCorPlot(x))
 dev.off()
@@ -103,7 +100,7 @@ meanDat$dummy <- with(meanDat, interaction(watershed, dataSet))
 
 ## Changes in length through time
 index <- unique(meanDat$dummy)
-pdf(here("github/histSockeye/outputs/figs/linearTrends.pdf"), height=6, width=6)
+pdf(here("outputs/figs/linearTrends.pdf"), height=6, width=6)
 for(i in seq_along(index)) {
 	d <- meanDat[meanDat$dummy == index[i], ]
 	p <- ggplot(d, aes(x = as.numeric(retYr), y = meanFL, col = as.factor(age))) + 
@@ -115,7 +112,7 @@ for(i in seq_along(index)) {
 dev.off()
 
 # meanDat$dummy <- with(meanDat, interaction(watershed, dataSet))
-pdf(here("github/histSockeye/outputs/figs/phenologyTrends.pdf"), height=6, width=6)
+pdf(here("outputs/figs/phenologyTrends.pdf"), height=6, width=6)
 sockDat$dummy <- with(sockDat, interaction(watershed, dataSet))
 ggplot(sockDat, aes(x = jDay, y = fl, col = as.factor(age))) + 
     	# geom_point() + 
@@ -256,7 +253,7 @@ meanRiv <- datListN[[3]] %>%
 			group_by(yrFac) %>% 
 			summarize(meanFL = mean(fl), meanP1 = mean(pdoStd), meanP2 = mean(pinkStd))
 
-pdf(here("github/histSockeye/outputs/figs/timeseries.pdf"), height=10, width=8)
+pdf(here::here("outputs/figs/timeseries.pdf"), height=10, width=8)
 par(mfrow=c(3,1), mar=c(4,4,3,0)+0.1, oma=c(0,0,0,0))
 plotTS(meanNass, datListN[[1]])
 legend("topleft", c("Fork Length", "Environmental", "Catch"), 
@@ -445,7 +442,7 @@ rivAgeFig <- ggplot(predAgeDat, aes(x = age, y = response, ymin = lwr, ymax = up
 	ggtitle("Hist Rivers")
 
 # Save figures
-pdf(here("github/histSockeye/outputs/figs/predictionsSox.pdf"), height=4, width=4)
+pdf(here::here("outputs/figs/predictionsSox.pdf"), height=4, width=4)
 theme_set(theme_bw())
 par(mfrow=c(1,3), mar=c(0,0,2.75,0)+0.1, oma=c(0,0,0,0))
 rivPdoFig
@@ -469,7 +466,7 @@ ltNTrunc2 <- gam(fl ~ age + s(yrFac, bs="re", by=dum),
 	correlation=corAR1(form = ~ 1|yrFac), data=nassDat, method="REML")
 nassDat$residPink <- resid(ltNTrunc1)
 nassDat$residNoPink <- resid(ltNTrunc2)
-write.csv(nassDat, here("github/histSockeye/outputs/data/nassDatWResids.csv"))
+write.csv(nassDat, here::here("outputs/data/nassDatWResids.csv"))
 
 riversDat$dum <- 1	
 ltRTrunc1 <- gam(fl ~ s(pinkSE1, by=age, k=3) + age + s(yrFac, bs="re", by=dum), 
@@ -478,7 +475,7 @@ ltRTrunc2 <- gam(fl ~ age + s(yrFac, bs="re", by=dum),
 	correlation=corAR1(form = ~ 1|yrFac), data=riversDat, method="REML")
 riversDat$residPink <- resid(ltRTrunc1)
 riversDat$residNoPink <- resid(ltRTrunc2)
-write.csv(riversDat, here("github/histSockeye/outputs/data/riversDatWResids.csv"))
+write.csv(riversDat, here::here("outputs/data/riversDatWResids.csv"))
 
 
 
@@ -556,10 +553,10 @@ for(i in seq_along(predList)){
 	d <- predList[[i]][,vars]
 	names(d)[8] <- "predFL"
 	fileName <- fileNames[i]
-	write.csv(d, paste(here("github/histSockeye/outputs/data/"), fileName, ".csv", sep=""), row.names=FALSE)
+	write.csv(d, paste(here::here("outputs/data/"), fileName, ".csv", sep=""), row.names=FALSE)
 }
 
-par(mfrow=c(2,2), oma=c(0,0,0,0)+0.1, mar=(4,4,0,0))
+par(mfrow=c(2,2), oma=c(0,0,0,0), mar=(4,4,0,0))
 trimList <- c(predList[[2]], predList[[4]], predList[[5]])
 sapply(trimList, function(x) hist(trimList$response))
 
@@ -616,6 +613,5 @@ predTempDat <- with(predTempDat, data.frame(predTempDat,
 	)
 strsplit(as.character(fullTempDat$dummy)[1], " ")
 
-plotPredictions <- function(dataset, splitBy, )
 
 
