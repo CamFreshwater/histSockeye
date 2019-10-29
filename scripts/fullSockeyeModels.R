@@ -7,7 +7,7 @@
 # -------------------------------------------------
 
 library(mgcv); library(tidyverse); library(ggplot2); library(reshape2);
-library(car); library(mgcv.helper)
+library(car)
 
 source(here::here("scripts/histSockeyeFunc.R"))
 
@@ -82,7 +82,7 @@ names(datListN) <- c("nassDat", "nassDatMod", "riversDat")
 makeCorPlot <- function(df){
 	mat <- cor(df[,c("pc2Std", "tempStd", "pdoStd", "alpiStd", "sockStd", "pinkStd", "totalStd")])
 	figTitle <- paste(unique(df$watershed), unique(df$dataSet), sep=" ")
-	corrplot.mixed(mat, lower="ellipse", upper="number")
+	corrplot::corrplot.mixed(mat, lower="ellipse", upper="number")
 	mtext(side=3, line=1.5, figTitle, cex=1.2)
 }
 
@@ -203,6 +203,13 @@ rhPdoSock <- gam(fl ~ s(pdoStd, by=age, k=3) + s(sockStd, by=age, k=3) + age + s
 nmPc2Sock <- gam(fl ~ s(pc2Std, by=age, k=3) + s(sockStd, by=age, k=3) + age + s(yrFac, bs="re"),
 			 	 method="REML", data=datListN$nassDatMod)
 
+nhPDO <- gam(fl ~ s(pdoStd, by=age, k=3) + age + s(yrFac, bs="re"), 
+                  method="REML", data=datListN$nassDat)
+nmPDO <- gam(fl ~ s(pdoStd, by=age, k=3) + age + s(yrFac, bs="re"),
+                 method="REML", data=datListN$nassDatMod)
+summary(nhPDO)
+summary(nmPDO)
+
 
 ## Fit equivalent models with gamm so vif can be evaluated
 # rhPdoPinkAR <- gamm(fl ~ s(pdoStd, by=age, k=3) + s(pinkStd, by=age, k=3) + age, 
@@ -246,15 +253,22 @@ plotTS <- function(meanDat, dat){
 	return(x)
 }
 
+# meanNass <- datListN[[1]] %>% 
+# 			group_by(yrFac) %>% 
+# 			summarize(meanFL = mean(fl), meanP1 = mean(tempStd), meanP2 = mean(pinkStd))
+# meanNassMod <- datListN[[2]] %>% 
+# 			group_by(yrFac) %>% 
+# 			summarize(meanFL = mean(fl), meanP1 = mean(pc2Std), meanP2 = mean(pinkStd))
+# meanRiv <- datListN[[3]] %>% 
+# 			group_by(yrFac) %>% 
+# 			summarize(meanFL = mean(fl), meanP1 = mean(pdoStd), meanP2 = mean(pinkStd))
 meanNass <- datListN[[1]] %>% 
-			group_by(yrFac) %>% 
-			summarize(meanFL = mean(fl), meanP1 = mean(tempStd), meanP2 = mean(pinkStd))
+  group_by(yrFac) %>% 
+  summarize(meanFL = mean(fl), meanP1 = mean(pdoStd), meanP2 = mean(pinkStd))
 meanNassMod <- datListN[[2]] %>% 
-			group_by(yrFac) %>% 
-			summarize(meanFL = mean(fl), meanP1 = mean(pc2Std), meanP2 = mean(pinkStd))
-meanRiv <- datListN[[3]] %>% 
-			group_by(yrFac) %>% 
-			summarize(meanFL = mean(fl), meanP1 = mean(pdoStd), meanP2 = mean(pinkStd))
+  group_by(yrFac) %>% 
+  summarize(meanFL = mean(fl), meanP1 = mean(pdoStd), meanP2 = mean(pinkStd))
+
 
 pdf(here::here("outputs/figs/timeseries.pdf"), height=10, width=8)
 par(mfrow=c(3,1), mar=c(4,4,3,0)+0.1, oma=c(0,0,0,0))
@@ -558,10 +572,6 @@ for(i in seq_along(predList)){
 	fileName <- fileNames[i]
 	write.csv(d, paste(here::here("outputs/data/"), fileName, ".csv", sep=""), row.names=FALSE)
 }
-
-par(mfrow=c(2,2), oma=c(0,0,0,0), mar=(4,4,0,0))
-trimList <- c(predList[[2]], predList[[4]], predList[[5]])
-sapply(trimList, function(x) hist(trimList$response))
 
 
 
