@@ -59,6 +59,8 @@ fullDat <- Reduce(function(x, y) merge(x, y, by=c("retYr")),
                        pinkCatch, totalCatch))
 fullDat <- standardizeVar(fullDat)
 
+# saveRDS(fullDat, here::here("data/combinedData.RDS"))
+
 nassDat <- subset(fullDat, fullDat$watershed %in% "nass")
 nassDatMod <- subset(nassDat, nassDat$dataSet %in% "mod")
 nassDat <- subset(nassDat, nassDat$dataSet %in% "hist")
@@ -80,7 +82,8 @@ names(datListN) <- c("nassDat", "nassDatMod", "riversDat")
 
 # correlations among predictor variables
 makeCorPlot <- function(df){
-	mat <- cor(df[,c("pc2Std", "tempStd", "pdoStd", "alpiStd", "sockStd", "pinkStd", "totalStd")])
+	mat <- cor(df[,c("pc2Std", "tempStd", "pdoStd", "alpiStd", "sockStd", 
+	                 "pinkStd", "totalStd")])
 	figTitle <- paste(unique(df$watershed), unique(df$dataSet), sep=" ")
 	corrplot::corrplot.mixed(mat, lower="ellipse", upper="number")
 	mtext(side=3, line=1.5, figTitle, cex=1.2)
