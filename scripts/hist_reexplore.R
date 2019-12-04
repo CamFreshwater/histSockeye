@@ -20,7 +20,7 @@ source(here::here("scripts/histSockeyeFunc.R"))
 # sockDat <- read.csv(here::here("data/nassFullSox.csv"), stringsAsFactors=F)
 # catchDat <- read.csv(here::here("data/akCatch.csv"), stringsAsFactors=F)
 
-fullDat <- readRDS(here::here("data", "combinedData.RDS")) %>% 
+full <- readRDS(here::here("data", "combinedData.RDS")) %>% 
   mutate(index = paste(watershed, dataSet, sep = "_"))
 
 #EXPLORATORY -------------------------------------------------------------------
@@ -29,24 +29,29 @@ fullDat <- readRDS(here::here("data", "combinedData.RDS")) %>%
 #   tally()
 
 # Plot changes in size among indices
-meanDat <- fullDat %>%
-  group_by(retYr, age, watershed, dataSet) %>%
+mean_dat <- full %>%
+  group_by(retYr, age, index) %>%
   summarize(meanFL = mean(fl), pdo = mean(pdo), alpi = mean(alpi), 
             rawSst = mean(temp), pcaSst = mean(pc2), pink = mean(pinkCatch), 
             sox = mean(sockCatch)) 
 
-ggplot(meanDat, aes(x = as.numeric(retYr), y = meanFL, col = as.factor(age))) + 
+lin_size_trend <- ggplot(mean_dat, aes(x = as.numeric(retYr), y = meanFL, 
+                                      col = as.factor(age))) + 
   geom_point() + 
   geom_smooth(method = "lm") +
   facet_wrap(~index, scales = "free_x")
 
+pdf(here::here("outputs", "figs", "linear_size_trend.pdf"))
+lin_size_trend
+dev.off()
 
-ppnDat <- fullDat %>% 
+# Plot changes in age structure
+age_ppn <- full %>% 
   group_by(index, retYr, age) %>% 
   summarise(n = n()) %>% 
   mutate(ageFreq = n / sum(n))
 
-ggplot(ppnDat) +
+age_comp <- ggplot(age_ppn) +
   geom_area(aes(x = retYr, y = ageFreq, fill = as.factor(age)), 
             position = 'stack') +
   xlab("Return Year") +
@@ -54,27 +59,6 @@ ggplot(ppnDat) +
   scale_fill_discrete(name = "age") +
   facet_wrap(~index, scales = "free_x")
 
-# Plot changes in age structure through time
-temp <- nassDat[,c("retYr", "age")]
-temp2 <- prop.table(table(temp), 1)
-nassage <- as.data.frame(melt(temp2))
-names(nassage) <- c("retYr", "age", "ppn")
-
-temp <- riversDat[,c("retYr", "age")]
-temp2 <- prop.table(table(temp), 1)
-riversage <- as.data.frame(melt(temp2))
-names(riversage) <- c("retYr", "age", "ppn")
-
-pdf(here("NassRivers/figs/ageStruc.pdf"), height=4, width=4)
-ggplot(nassage, aes(x = retYr, y = ppn, fill = as.factor(age)))  +
-  geom_area(position = 'stack') +
-  xlab("Return Year") +
-  ylab("Proportion") +
-  scale_fill_discrete(name = "age")
-ggplot(riversage, aes(x = retYr, y = ppn, fill = as.factor(age))) +
-  geom_area(position = 'stack') +
-  xlab("Return Year") +
-  ylab("Proportion") +
-  scale_fill_discrete(name = "age")
+pdf(here::here("outputs", "figs", "age_comp.pdf"))
+age_comp
 dev.off()
-
