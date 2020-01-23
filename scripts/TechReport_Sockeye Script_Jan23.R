@@ -8,9 +8,10 @@
 
 library(tidyverse); library(dplyr); library(ggplot2)
 
-# rm(list = ls()) # clear objects 
-# setwd("/Users/JacobWeil/Desktop/Sockeye_2019/data/")
+rm(list = ls()) # clear objects
+setwd("/Users/JacobWeil/Desktop/Sockeye_2019/data/")
 
+## Remove the here::here if you're using setwd
 gc <- read.csv(here::here("data", "nass_data_GC_trimmed.csv"), stringsAsFactors=F)
 #bilt <- read.csv(("nass_data_BILTON.csv"), stringsAsFactors=F)
 #monk <- read.csv(("nass_data_MONKLEY.csv"), stringsAsFactors=F)
@@ -21,25 +22,27 @@ mod <- read.csv(here::here("data", "nass_data_MOD_trimmed.csv"), stringsAsFactor
 
 
 ## Make a single, trimmed dataset to compare only the variables we are plotting (FL, DOY, SEX, AGE, YEAR)
-gc_trim <- data.frame(gc$FL_mm,gc$DAYOFYR,gc$SEX,gc$AGE,gc$YEAR,
-                      dataset = "GC")
-colnames(gc_trim) <- c("FL","DOY","SEX","AGE","YEAR", "PER")
+gc_trim <- data.frame(gc$FL_mm,gc$DAYOFYR,gc$SEX,gc$AGE,gc$YEAR)
+colnames(gc_trim) <- c("FL","DOY","SEX","AGE","YEAR")
 #bilt_trim <- data.frame(bilt$FL_mm,bilt$DAYOFYR,bilt$SEX,bilt$AGE,bilt$YEAR)
 #colnames(bilt_trim) <- c("FL","DOY","SEX","AGE","YEAR")
 #monk_trim <- data.frame(monk$FL_mm,monk$DAYOFYR,monk$SEX,monk$AGE,monk$YEAR)
 #colnames(monk_trim) <- c("FL","DOY","SEX","AGE","YEAR")
-mod_trim <- data.frame(mod$FL_mm,mod$DAYOFYR,mod$SEX,mod$AGE,mod$YEAR,
-                       dataset = "mod")
-colnames(mod_trim) <- c("FL","DOY","SEX","AGE","YEAR", "PER")
+mod_trim <- data.frame(mod$FL_mm,mod$DAYOFYR,mod$SEX,mod$AGE,mod$YEAR)
+colnames(mod_trim) <- c("FL","DOY","SEX","AGE","YEAR")
 
 
 ## Bind datasets ##
 #FullDataset <- rbind(gc_trim,bilt_trim,monk_trim,mod_trim)
 FullDataset <- rbind(gc_trim,mod_trim) %>% 
-  mutate(zDOY = scale(DOY),
+  mutate(zDOY = scale(DOY), # scale DOY
          AGE = as.factor(AGE),
-         YEAR = as.factor(YEAR),
-         PER = as.factor(PER))
+         YEAR = as.factor(YEAR))
+# We scale DOY because we want to account for it in the model, but we don't
+# really care about making predictions associated witha  specific day of year.
+# If it's scaled we can remove its effect (i.e. set it at a mean value) by 
+# setting it to 0 (see pred_dat below)
+
 
 ## Calculate average DOY of returning fish per year ##
 # CF NOTE: Using average DOY isn't necessary, we can just use individual values
@@ -55,7 +58,7 @@ FullDataset <- rbind(gc_trim,mod_trim) %>%
 
 ## ---------------------- Plotting size trends ------------------------------
 
-
+### Code below may be more appropriate
 ## Changes in length through time
 # index <- unique(model$dummy)
 # pdf(("/Users/JacobWeil/Desktop/Sockeye_2019/figs/linearTrends.pdf"), height=6, width=6)
@@ -69,24 +72,45 @@ FullDataset <- rbind(gc_trim,mod_trim) %>%
 # }
 # dev.off()
 
-trim_dat <- FullDataset %>% 
-  slice(which(row_number() %% 5 == 1))
 
 library(lme4)
 library(merTools)
 
-mod1 <- lmer(FL ~ zDOY + SEX + AGE * (1 | YEAR), data = trim_dat)
+# This is the first model I tried. It's incorrect because it assumes that the 
+# age effect is stable through time (i.e. temporal trends are the same 
+# regardless of age at maturity), but look at the predictions to see for yourself
+mod <- lmer(FL ~ zDOY + SEX + AGE + (1 | YEAR), data = FullDataset,
+            REML = FALSE)
+# This is the model I think we should use. Basically FL is a function of run timing
+# sex, and age-at-maturity. Samples within a given age and year are more similar 
+# to one another than not (i.e. covary). This is accounted for in the random effects 
+mod1 <- lmer(FL ~ zDOY + SEX + AGE + (1 | AGE:YEAR), data = FullDataset,
+             REML = FALSE)
 summary(mod1)
 
+# Generate a dataframe of predictive values, i.e. each age class, average entry 
+# day (0 when scaled), a reference sex, and each year we have data for. 
+# expand.grid is used to generate unique combinations of each variable
 pred_dat <- expand.grid(AGE = c("42", "52", "53", "63"),
-                       zDOY = 0,
-                       SEX = "M",
-                       YEAR = unique(trim_dat$YEAR)[43:53])
+                        zDOY = 0,
+                        SEX = "M",
+                        YEAR = unique(FullDataset$YEAR)) 
+# Geenrate confidences intervals for predictions based on model
 preds <- predictInterval(mod1, newdata = pred_dat, n.sims = 999)
-dat_out <- cbind(pred_dat, preds)
+# Bind confidence intervals to the predictive data for plotting
+dat_out <- cbind(pred_dat, preds) %>% 
+  # Add a factor representing sample collection to visualize effects 
+  # NOTE: period is not modeled, we're simply assigning a color in the plot to 
+  # each data set
+  mutate(indYear = as.numeric(as.character(YEAR)),
+         period = case_when(
+           indYear < 1947 ~ "GC",
+           indYear > 1993 ~ "mod"
+         ))
 
-ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr), data = dat_out) +
-  geom_point() + 
+ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)), 
+       data = dat_out) +
+  geom_point(shape = 21) + 
   geom_linerange() +
   labs(x="Index", y="Prediction w/ 95% PI") + 
   theme_bw() +
