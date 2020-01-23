@@ -6,75 +6,88 @@
 # to model variability in Sockeye size-at-age from 1914 to 2019
 # -------------------------------------------------
 
-library(mgcv); library(tidyverse); library(dplyr); library(ggplot2); library(lme4);
-library(corrplot); library(reshape2); library(car); library(mgcv.helper)
+library(tidyverse); library(dplyr); library(ggplot2)
 
-rm(list = ls()) # clear objects 
-setwd("/Users/JacobWeil/Desktop/Sockeye_2019/data/")
+# rm(list = ls()) # clear objects 
+# setwd("/Users/JacobWeil/Desktop/Sockeye_2019/data/")
 
-gc <- read.csv(("nass_data_GC_trimmed.csv"), stringsAsFactors=F)
+gc <- read.csv(here::here("data", "nass_data_GC_trimmed.csv"), stringsAsFactors=F)
 #bilt <- read.csv(("nass_data_BILTON.csv"), stringsAsFactors=F)
 #monk <- read.csv(("nass_data_MONKLEY.csv"), stringsAsFactors=F)
-mod <- read.csv(("nass_data_MOD_trimmed.csv"), stringsAsFactors=F)
+mod <- read.csv(here::here("data", "nass_data_MOD_trimmed.csv"), stringsAsFactors=F)
 
-nass <- read.csv(here::here("data", "nassFullSox.csv")) %>% 
-  arrange(retYr)
-FullDataset <- nass %>% 
-  select(fl, DOY = jDay, sex, age, YEAR = retYr) %>% 
-  rename_all(toupper)
 
 ## ---------------------- Prepping datasets for models ------------------------
 
 
 ## Make a single, trimmed dataset to compare only the variables we are plotting (FL, DOY, SEX, AGE, YEAR)
-gc_trim <- data.frame(gc$FL_mm,gc$DAYOFYR,gc$SEX,gc$AGE,gc$YEAR)
-colnames(gc_trim) <- c("FL","DOY","SEX","AGE","YEAR")
+gc_trim <- data.frame(gc$FL_mm,gc$DAYOFYR,gc$SEX,gc$AGE,gc$YEAR,
+                      dataset = "GC")
+colnames(gc_trim) <- c("FL","DOY","SEX","AGE","YEAR", "PER")
 #bilt_trim <- data.frame(bilt$FL_mm,bilt$DAYOFYR,bilt$SEX,bilt$AGE,bilt$YEAR)
 #colnames(bilt_trim) <- c("FL","DOY","SEX","AGE","YEAR")
 #monk_trim <- data.frame(monk$FL_mm,monk$DAYOFYR,monk$SEX,monk$AGE,monk$YEAR)
 #colnames(monk_trim) <- c("FL","DOY","SEX","AGE","YEAR")
-mod_trim <- data.frame(mod$FL_mm,mod$DAYOFYR,mod$SEX,mod$AGE,mod$YEAR)
-colnames(mod_trim) <- c("FL","DOY","SEX","AGE","YEAR")
+mod_trim <- data.frame(mod$FL_mm,mod$DAYOFYR,mod$SEX,mod$AGE,mod$YEAR,
+                       dataset = "mod")
+colnames(mod_trim) <- c("FL","DOY","SEX","AGE","YEAR", "PER")
 
 
 ## Bind datasets ##
 #FullDataset <- rbind(gc_trim,bilt_trim,monk_trim,mod_trim)
-FullDataset <- rbind(gc_trim,mod_trim)
+FullDataset <- rbind(gc_trim,mod_trim) %>% 
+  mutate(zDOY = scale(DOY),
+         AGE = as.factor(AGE),
+         YEAR = as.factor(YEAR),
+         PER = as.factor(PER))
 
 ## Calculate average DOY of returning fish per year ##
-DOY_agg <- FullDataset %>%
-  group_by(YEAR) %>%
-  summarise_at(vars(DOY), list(mean = mean), as.factor=TRUE)
-colnames(DOY_agg) <- c("YEAR","DOY_agg")
+# CF NOTE: Using average DOY isn't necessary, we can just use individual values
+# within the model
+# DOY_agg <- FullDataset %>%
+#   group_by(YEAR) %>%
+#   summarise_at(vars(DOY), list(mean = mean), as.factor=TRUE)
+# colnames(DOY_agg) <- c("YEAR","DOY_agg")
 
 ## Bind DOY_agg with full dataset ##
-full <- merge(FullDataset,DOY_agg, by="YEAR")
+# full <- merge(FullDataset,DOY_agg, by="YEAR")
 
 
 ## ---------------------- Plotting size trends ------------------------------
 
-model <- glm(FL ~ DOY_agg + SEX + AGE + (1|YEAR), data=full)
-summary(model)
 
 ## Changes in length through time
-index <- unique(model$dummy)
-pdf(("/Users/JacobWeil/Desktop/Sockeye_2019/figs/linearTrends.pdf"), height=6, width=6)
-for(i in seq_along(index)) {
-  d <- model[model$dummy == index[i], ]
-  p <- ggplot(d, aes(x = as.numeric(YEAR), y = FL, col = as.factor(AGE))) + 
-    geom_point() + 
-    geom_smooth(method = "lm") +
-    ggtitle(index[i])
-  print(p)
-}
-dev.off()
+# index <- unique(model$dummy)
+# pdf(("/Users/JacobWeil/Desktop/Sockeye_2019/figs/linearTrends.pdf"), height=6, width=6)
+# for(i in seq_along(index)) {
+#   d <- model[model$dummy == index[i], ]
+#   p <- ggplot(d, aes(x = as.numeric(YEAR), y = FL, col = as.factor(AGE))) + 
+#     geom_point() + 
+#     geom_smooth(method = "lm") +
+#     ggtitle(index[i])
+#   print(p)
+# }
+# dev.off()
 
-# 1) Don't average DOY before entry
-# 2) Fit models
-# 3) AICc for model selection
-# 4) Generate predictions over time for each age class
-# 5) Fixed vs. random effects for year...
+trim_dat <- FullDataset %>% 
+  slice(which(row_number() %% 5 == 1))
 
+library(lme4)
+library(merTools)
 
+mod1 <- lmer(FL ~ zDOY + SEX + AGE * (1 | YEAR), data = trim_dat)
+summary(mod1)
 
+pred_dat <- expand.grid(AGE = c("42", "52", "53", "63"),
+                       zDOY = 0,
+                       SEX = "M",
+                       YEAR = unique(trim_dat$YEAR)[43:53])
+preds <- predictInterval(mod1, newdata = pred_dat, n.sims = 999)
+dat_out <- cbind(pred_dat, preds)
 
+ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr), data = dat_out) +
+  geom_point() + 
+  geom_linerange() +
+  labs(x="Index", y="Prediction w/ 95% PI") + 
+  theme_bw() +
+  facet_wrap(~AGE)
