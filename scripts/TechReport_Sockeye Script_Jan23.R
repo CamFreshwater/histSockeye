@@ -35,7 +35,7 @@ colnames(mod_trim) <- c("FL","DOY","SEX","AGE","YEAR")
 ## Bind datasets ##
 #FullDataset <- rbind(gc_trim,bilt_trim,monk_trim,mod_trim)
 FullDataset <- rbind(gc_trim,mod_trim) %>% 
-  mutate(zDOY = scale(DOY), # scale DOY
+  mutate(zDOY = as.numeric(scale(DOY)), # scale DOY
          AGE = as.factor(AGE),
          YEAR = as.factor(YEAR))
 # We scale DOY because we want to account for it in the model, but we don't
@@ -88,6 +88,10 @@ mod1 <- lmer(FL ~ zDOY + SEX + AGE + (1 | AGE:YEAR), data = FullDataset,
              REML = FALSE)
 summary(mod1)
 
+mod_f <- lm(FL ~ as.numeric(zDOY) + SEX + AGE:YEAR, data = FullDataset)
+summary(mod_f)
+
+
 # Generate a dataframe of predictive values, i.e. each age class, average entry 
 # day (0 when scaled), a reference sex, and each year we have data for. 
 # expand.grid is used to generate unique combinations of each variable
@@ -96,7 +100,10 @@ pred_dat <- expand.grid(AGE = c("42", "52", "53", "63"),
                         SEX = "M",
                         YEAR = unique(FullDataset$YEAR)) 
 # Geenrate confidences intervals for predictions based on model
+preds0 <- predictInterval(mod, newdata = pred_dat, n.sims = 999)
 preds <- predictInterval(mod1, newdata = pred_dat, n.sims = 999)
+preds_fix <- predict.lm(mod_f, newdata = pred_dat, se.fit = TRUE)
+
 # Bind confidence intervals to the predictive data for plotting
 dat_out <- cbind(pred_dat, preds) %>% 
   # Add a factor representing sample collection to visualize effects 
@@ -107,7 +114,6 @@ dat_out <- cbind(pred_dat, preds) %>%
            indYear < 1947 ~ "GC",
            indYear > 1993 ~ "mod"
          ))
-
 ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)), 
        data = dat_out) +
   geom_point(shape = 21) + 
@@ -115,3 +121,30 @@ ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)),
   labs(x="Index", y="Prediction w/ 95% PI") + 
   theme_bw() +
   facet_wrap(~AGE)
+
+dat_out_f <- cbind(pred_dat, preds_fix) %>% 
+  mutate(indYear = as.numeric(as.character(YEAR)),
+         period = case_when(
+           indYear < 1947 ~ "GC",
+           indYear > 1993 ~ "mod"
+         ),
+         lwr = fit + (qnorm(0.025) * se.fit),
+         upr = fit + (qnorm(0.975) * se.fit))
+ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)), 
+       data = dat_out_f) +
+  geom_point(shape = 21) + 
+  geom_linerange() +
+  labs(x="Index", y="Prediction w/ 95% PI") + 
+  theme_bw() +
+  facet_wrap(~AGE)
+
+dat_out_f %>% 
+  filter(AGE == "42", 
+         fit > 650)
+
+tt <- FullDataset %>% 
+  filter(AGE == "42", YEAR == "1935", SEX == "M") %>%
+  # filter(AGE == "42") %>%
+  # group_by(YEAR, SEX, AGE) %>% 
+  summarize(n = length(unique(FL)))
+
