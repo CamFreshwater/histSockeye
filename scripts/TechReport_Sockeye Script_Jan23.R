@@ -8,8 +8,6 @@
 
 library(tidyverse); library(dplyr); library(ggplot2)
 
-rm(list = ls()) # clear objects
-setwd("/Users/JacobWeil/Desktop/Sockeye_2019/data/")
 
 ## Remove the here::here if you're using setwd
 gc <- read.csv(here::here("data", "nass_data_GC_trimmed.csv"), stringsAsFactors=F)
@@ -87,6 +85,9 @@ mod <- lmer(FL ~ zDOY + SEX + AGE + (1 | YEAR), data = FullDataset,
 mod1 <- lmer(FL ~ zDOY + SEX + AGE + (1 | AGE:YEAR), data = FullDataset,
              REML = FALSE)
 summary(mod1)
+mod1b <- lmer(FL ~ zDOY + AGE + (1 | AGE:YEAR), data = FullDataset,
+             REML = FALSE)
+AIC(mod1, mod1b)
 
 mod_f <- lm(FL ~ as.numeric(zDOY) + SEX + AGE:YEAR, data = FullDataset)
 summary(mod_f)
@@ -148,3 +149,50 @@ tt <- FullDataset %>%
   # group_by(YEAR, SEX, AGE) %>% 
   summarize(n = length(unique(FL)))
 
+
+# ------------------------------------------------------------------------------
+## Fit each age class independently
+
+a42 <- FullDataset %>% 
+  filter(AGE == "42")
+a52 <- FullDataset %>% 
+  filter(AGE == "52")
+a53 <- FullDataset %>% 
+  filter(AGE == "53")
+a63 <- FullDataset %>% 
+  filter(AGE == "63")
+dat_list <- list(a42, a52, a53, a63)
+
+pred_dat <- expand.grid(zDOY = 0,
+                        SEX = "F",
+                        YEAR = unique(FullDataset$YEAR)) 
+
+mod_fits_f <- map(dat_list, function(x) {
+  fit <- lmer(FL ~ zDOY + SEX + (1 | YEAR), data = x,
+       REML = TRUE)
+  preds <- predictInterval(fit, newdata = pred_dat, n.sims = 999)
+  # fit <- lm(FL ~ zDOY + SEX + YEAR, data = x)
+  
+  cbind(pred_dat, preds) %>% 
+    mutate(age = unique(x$AGE),
+           indYear = as.numeric(as.character(YEAR)),
+           period = case_when(
+             indYear < 1947 ~ "GC",
+             indYear > 1993 ~ "mod"
+           ))
+}) %>% 
+  bind_rows
+
+ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)), 
+       data = mod_fits) +
+  geom_point(shape = 21) + 
+  geom_linerange() +
+  labs(x="Index", y="Prediction w/ 95% PI") + 
+  theme_bw() +
+  facet_wrap(~age)
+
+ggplot(aes(x = YEAR, y=FL), data = FullDataset) +
+  geom_boxplot() + 
+  labs(x="Index", y="Observed") + 
+  theme_bw() +
+  facet_wrap(~AGE)
