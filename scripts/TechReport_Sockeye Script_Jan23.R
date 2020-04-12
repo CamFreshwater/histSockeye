@@ -184,7 +184,7 @@ mod_fits_f <- map(dat_list, function(x) {
   bind_rows
 
 ggplot(aes(x = YEAR, y=fit, ymin=lwr, ymax=upr, fill = as.factor(period)), 
-       data = mod_fits) +
+       data = mod_fits_f) +
   geom_point(shape = 21) + 
   geom_linerange() +
   labs(x="Index", y="Prediction w/ 95% PI") + 
