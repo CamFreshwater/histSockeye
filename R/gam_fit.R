@@ -30,8 +30,16 @@ dat <- dat_in %>%
   filter(
     age %in% c("42", "52", "53", "63"),
     !is.na(yday)
-  ) %>% 
-  glimpse()
+  ) 
+
+# predictive dataset
+pred_dat <- expand.grid(age = unique(dat$age),
+                        yday_c = 0,
+                        sex = unique(dat$sex),
+                        year_f = unique(dat$year_f)) %>% 
+  mutate(
+    year = as.numeric(as.character(year_f))
+  )
 
 
 # visualize raw data
@@ -75,11 +83,6 @@ itsadug::acf_resid(mod1)
 ## evidence of heavy tails; try fitting equivalent model in brms with student-t
 
 # generate predictions using frequentist model
-pred_dat <- expand.grid(age = unique(dat$age),
-                        yday_c = 0,
-                        sex = unique(dat$sex),
-                        year_f = unique(dat$year_f)) 
-# Generate confidences intervals for predictions based on model
 preds <- merTools::predictInterval(mod1, newdata = pred_dat, n.sims = 999)
 
 
@@ -88,8 +91,7 @@ pred_dat_freq <- cbind(pred_dat, preds) %>%
   # Add a factor representing sample collection to visualize effects 
   # NOTE: period is not modeled, we're simply assigning a color in the plot to 
   # each data set
-  mutate(year = as.numeric(as.character(year_f)),
-         period = case_when(
+  mutate(period = case_when(
            year < 1947 ~ "GC",
            year > 1993 ~ "mod",
            TRUE ~ "bilton"
@@ -97,8 +99,8 @@ pred_dat_freq <- cbind(pred_dat, preds) %>%
 
 # visualize predictions
 ggplot(pred_dat_freq, aes(x = year)) +
-  # geom_point(aes(y = fit, colour = period)) +
-  geom_pointrange(aes(y = fit, ymin = lwr, ymax = upr, colour = period)) +
+  geom_point(aes(y = fit, colour = period)) +
+  # geom_pointrange(aes(y = fit, ymin = lwr, ymax = upr, colour = period)) +
   facet_grid(sex~age)
 
 
@@ -153,9 +155,8 @@ pred_dat_bayes <- pred_dat %>%
   mutate(
     mean = apply(post_pred, 2, mean),
     low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
-    up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95)),
-    year = as.numeric(as.character(year_f))
-  ) 
+    up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
+    ) 
 
 ggplot(pred_dat_bayes, aes(x = year)) +
   # geom_point(aes(y = fit, colour = period)) +
@@ -165,10 +166,58 @@ ggplot(pred_dat_bayes, aes(x = year)) +
 
 # ANNUAL TRENDS ----------------------------------------------------------------
 
-pred_dat_freq$age_sex <- factor(paste(pred_dat_freq$age, pred_dat_freq$sex, sep = "_"))
+# fit gam to annual estimates to identify age specific trends
+pred_dat_freq$age_sex <- factor(paste(pred_dat_freq$age, pred_dat_freq$sex,
+                                      sep = "_"))
+pred_dat$age_sex <- factor(paste(pred_dat$age, pred_dat$sex,
+                                      sep = "_"))
 
-gam1 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + age + sex,
+gam1 <- gam(fit ~ s(year, m = 2) + s(year, by = age_sex, m = 1) + age + sex,
+            data = pred_dat_freq)
+gam2 <- gam(fit ~ s(year, by = age_sex, m = 2) + age + sex,
             data = pred_dat_freq)
 
+appraise(gam1)
+qq_plot(gam1, method = "simulate")
 draw(gam1, residuals = TRUE)
+
+
+# calculate derivatives representing significant increases
+der <- derivatives(gam1, type = "central") 
+sig_der_years <- der %>% 
+  filter(smooth == "s(year)") %>% 
+  mutate(
+    year_f = as.factor(floor(data + 0.00001)),
+    sig_change = case_when(
+      lower > 0 ~ "sig_increase",
+      upper < 0 ~ "sig_decrease", 
+      TRUE ~ "nonsig")
+  ) 
+
+ggplot(der, aes(x = data, y = derivative)) + 
+  geom_line(size = 1.2) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
+  facet_wrap(~smooth)
+
+
+pred_gam <- predict.gam(gam1, pred_dat, se.fit = TRUE)
+pred_dat_gam <- pred_dat %>% 
+  mutate(pred_fl = as.numeric(pred_gam$fit),
+         pred_se = as.numeric(pred_gam$se.fit),
+         up = pred_fl + (1.96 * pred_se),
+         low = pred_fl - (1.96 * pred_se)) %>% 
+  left_join(., sig_der_years %>% select(year_f, sig_change), by = "year_f") %>% 
+  mutate(sig_change2 = ifelse(i))
+
+col_pal <- c("grey60", "blue", "red")
+names(col_pal) <- unique(pred_dat_gam$sig_change)
+
+
+ggplot(pred_dat_gam, aes(x = year, y = pred_fl)) +
+  geom_line(aes(col = sex)) +
+  geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
+  geom_point(data = pred_dat_freq, aes(x = year, y = fit, col = sex),
+             alpha = 0.4) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek()
 
