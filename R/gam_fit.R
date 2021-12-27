@@ -20,7 +20,7 @@ dat <- dat_in %>%
   mutate(
     year_f = as.factor(year),
     sex = ifelse(sex == 1, "male", "female"),
-    age = as.character(age),
+    age = factor(as.character(age)),
     date = as.POSIXct(paste(day, month, year, sep = "-"),
                       format = "%d-%m-%Y"),
     yday = lubridate::yday(date),
@@ -194,10 +194,11 @@ sig_der_years <- der %>%
       TRUE ~ "nonsig")
   ) 
 
-ggplot(der, aes(x = data, y = derivative)) + 
+pred_gam_der <- ggplot(der, aes(x = data, y = derivative)) + 
   geom_line(size = 1.2) + 
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
-  facet_wrap(~smooth)
+  facet_wrap(~smooth) +
+  ggsidekick::theme_sleek()
 
 
 pred_gam <- predict.gam(gam1, pred_dat, se.fit = TRUE)
@@ -205,19 +206,76 @@ pred_dat_gam <- pred_dat %>%
   mutate(pred_fl = as.numeric(pred_gam$fit),
          pred_se = as.numeric(pred_gam$se.fit),
          up = pred_fl + (1.96 * pred_se),
-         low = pred_fl - (1.96 * pred_se)) %>% 
-  left_join(., sig_der_years %>% select(year_f, sig_change), by = "year_f") %>% 
-  mutate(sig_change2 = ifelse(i))
+         low = pred_fl - (1.96 * pred_se))# %>% 
+  # left_join(., sig_der_years %>% select(year_f, sig_change), by = "year_f") %>% 
+  # mutate(sig_change2 = ifelse(i))
 
 col_pal <- c("grey60", "blue", "red")
 names(col_pal) <- unique(pred_dat_gam$sig_change)
 
 
-ggplot(pred_dat_gam, aes(x = year, y = pred_fl)) +
+# predictions
+pred_gam_plot <- ggplot(pred_dat_gam, aes(x = year, y = pred_fl)) +
   geom_line(aes(col = sex)) +
   geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
   geom_point(data = pred_dat_freq, aes(x = year, y = fit, col = sex),
              alpha = 0.4) +
   facet_wrap(~age) +
-  ggsidekick::theme_sleek()
+  ggsidekick::theme_sleek() +
+  labs(y = "Predicted Length", x = "Year")
 
+
+pdf(here::here("outputs", "figs", "annual_gam_preds.pdf"))
+pred_gam_plot
+pred_gam_der
+dev.off()
+
+
+# INDIVIDUAL GAM ---------------------------------------------------------------
+
+# compare GAM fit to individual level data relative to annual estimates (includes
+# covariate for run timing)
+dat$age_sex <- factor(paste(dat$age, dat$sex, sep = "_"))
+gam_ind <- gam(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age_sex, m = 1) +
+                 age + sex, data = dat)
+gam_ind2 <- gam(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
+                 age + sex, data = dat)
+gam_ind3 <- gam(fl ~ s(yday_c) + s(year, m = 2) + age + sex, data = dat)
+AIC(gam_ind, gam_ind2, gam_ind3)
+
+
+#check model diagnostics
+appraise(gam_ind)
+qq_plot(gam_ind, method = "simulate")
+draw(gam_ind, residuals = TRUE)
+
+
+pred_gam_ind <- predict.gam(gam_ind, pred_dat, se.fit = TRUE)
+pred_dat_gam_ind <- pred_dat %>% 
+  mutate(pred_fl = as.numeric(pred_gam_ind$fit),
+         pred_se = as.numeric(pred_gam_ind$se.fit),
+         up = pred_fl + (1.96 * pred_se),
+         low = pred_fl - (1.96 * pred_se)) 
+
+
+pred_gam_ind_fig <- ggplot(pred_dat_gam_ind, aes(x = year, y = pred_fl)) +
+  geom_line(aes(col = sex), size = 1) +
+  geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
+  geom_jitter(data = trim_dat, aes(x = year, y = fl, col = sex),
+              alpha = 0.1) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  labs(y = "Predicted Length", x = "Year")
+
+
+# individual based GAM's derivatives
+der_ind <- derivatives(gam_ind, type = "central") 
+ggplot(der_ind %>% filter(var == "year"), aes(x = data, y = derivative)) + 
+  geom_line(size = 1.2) + 
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, colour = NA) +
+  facet_wrap(~smooth)
+
+
+pdf(here::here("outputs", "figs", "ind_gam_preds.pdf"))
+pred_gam_ind_fig
+dev.off()
