@@ -176,6 +176,8 @@ gam1 <- gam(fit ~ s(year, m = 2) + s(year, by = age_sex, m = 1) + age + sex,
             data = pred_dat_freq)
 gam2 <- gam(fit ~ s(year, by = age_sex, m = 2) + age + sex,
             data = pred_dat_freq)
+gam3 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + age + sex,
+            data = pred_dat_freq)
 
 appraise(gam1)
 qq_plot(gam1, method = "simulate")
@@ -231,6 +233,20 @@ pred_gam_der
 dev.off()
 
 
+# calculate decline relative to long-term (beginning to 2000) mean
+final_mean <- pred_dat_gam %>% 
+  filter(year > 2014) %>% 
+  group_by(age_sex) %>% 
+  summarize(new_mean_fl = mean(pred_fl)) 
+  
+pred_dat_gam %>% 
+  filter(year < 2001) %>% 
+  group_by(age_sex) %>% 
+  summarize(mean_fl = mean(pred_fl)) %>% 
+  left_join(., final_mean, by = "age_sex") %>% 
+  mutate(diff = mean_fl - new_mean_fl)
+
+
 # INDIVIDUAL GAM ---------------------------------------------------------------
 
 # compare GAM fit to individual level data relative to annual estimates (includes
@@ -279,3 +295,22 @@ ggplot(der_ind %>% filter(var == "year"), aes(x = data, y = derivative)) +
 pdf(here::here("outputs", "figs", "ind_gam_preds.pdf"))
 pred_gam_ind_fig
 dev.off()
+
+
+# INDIVIDUAL BAYESIAN GAM ------------------------------------------------------
+
+#check priors (WAY TOO LARGE TO FIT)
+brms::get_prior(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
+                  age + sex,
+                data = dat)
+brm1 <- brm(
+  fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
+       age + sex,
+  data = dat, seed = 17,
+  iter = 2000, warmup = 750, thin = 10, cores = 4, refresh = 0,
+  # iter = 500, warmup = 1000, thin = 10, cores = 4, refresh = 0,
+  control = list(adapt_delta = 0.90, max_treedepth = 12),
+  prior=c(prior(normal(613, 20), class="Intercept"),
+          prior(normal(0, 4), class="b"))
+)
+
