@@ -48,7 +48,7 @@ ggplot(dat) +
   facet_wrap(~age)
 
 trim_dat <- dat %>% 
-  sample_n(size = 10000)
+  sample_n(size = 20000)
 ggplot(trim_dat) +
   geom_point(aes(x = yday_c, y = fl), alpha = 0.3) +
   facet_grid(sex~age)
@@ -300,17 +300,19 @@ dev.off()
 # INDIVIDUAL BAYESIAN GAM ------------------------------------------------------
 
 #check priors (WAY TOO LARGE TO FIT)
-brms::get_prior(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
+brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 4) + 
+                  s(year, by = age, m = 1, k = 4) +
                   age + sex,
-                data = dat)
+                data = trim_dat)
 brm1 <- brm(
   fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
        age + sex,
-  data = dat, seed = 17,
+  data = trim_dat, seed = 17,
   iter = 2000, warmup = 750, thin = 10, cores = 4, refresh = 0,
   # iter = 500, warmup = 1000, thin = 10, cores = 4, refresh = 0,
-  control = list(adapt_delta = 0.90, max_treedepth = 12),
+  control = list(adapt_delta = 0.95, max_treedepth = 12),
   prior=c(prior(normal(613, 20), class="Intercept"),
-          prior(normal(0, 4), class="b"))
+          prior(normal(0, 2.5), class="b"))
 )
 
+saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
