@@ -10,6 +10,8 @@ library(tidyverse)
 library(lme4)
 library(mgcv)
 library(gratia)
+library(brms)
+library(tidybayes)
 
 
 # import nass data
@@ -30,7 +32,19 @@ dat <- dat_in %>%
   filter(
     age %in% c("42", "52", "53", "63"),
     !is.na(yday)
-  ) 
+  )  %>%
+  # Add a factor representing sample collection to visualize effects 
+  # NOTE: period is not modeled, we're simply assigning a color in the plot to 
+  # each data set
+  mutate(period = case_when(
+    year < 1947 ~ "GC",
+    year > 1993 ~ "mod",
+    TRUE ~ "bilton"
+  ))
+
+trim_dat <- dat %>% 
+  sample_n(size = 40000)
+
 
 # predictive dataset
 pred_dat <- expand.grid(age = unique(dat$age),
@@ -39,24 +53,36 @@ pred_dat <- expand.grid(age = unique(dat$age),
                         year_f = unique(dat$year_f)) %>% 
   mutate(
     year = as.numeric(as.character(year_f))
-  )
+  ) %>% 
+  droplevels() 
 
+
+# key when regime shifts occurred based on age
+reg_key = data.frame(
+  age = unique(dat$age)
+) %>% 
+  mutate(
+    regime_1976 = ifelse(age %in% c("42", "53"), 1978, 1979),
+    regime_1988 = ifelse(age %in% c("42", "53"), 1990, 1991)
+  ) 
 
 # visualize raw data
 ggplot(dat) +
-  geom_boxplot(aes(x = year_f, y = fl, fill = sex)) +
+  geom_boxplot(aes(x = year_f, y = fl, fill = period)) +
   facet_wrap(~age)
 
-trim_dat <- dat %>% 
-  sample_n(size = 20000)
 ggplot(trim_dat) +
   geom_point(aes(x = yday_c, y = fl), alpha = 0.3) +
+  facet_grid(sex~age)
+ggplot(trim_dat) +
+  geom_boxplot(aes(x = year_f, y = yday_c, fill = period)) +
   facet_grid(sex~age)
 ggplot(trim_dat) +
   geom_histogram(aes(fl)) +
   facet_grid(sex~age)
 
   
+
 # ANNUAL ESTIMATES FREQUENTIST -------------------------------------------------
 
 # compare fixed effects
@@ -107,8 +133,6 @@ ggplot(pred_dat_freq, aes(x = year)) +
 
 # ANNUAL ESTIMATES BAYESIAN ----------------------------------------------------
 
-library(brms)
-library(tidybayes)
 
 brms_n <- brm(fl ~ yday_c + sex + age + (1 | year_f:age), data = trim_dat,
               cores = 4, seed = 17,
@@ -176,16 +200,19 @@ gam1 <- gam(fit ~ s(year, m = 2) + s(year, by = age_sex, m = 1) + age + sex,
             data = pred_dat_freq)
 gam2 <- gam(fit ~ s(year, by = age_sex, m = 2) + age + sex,
             data = pred_dat_freq)
-gam3 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + age + sex,
+gam3 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + 
+              s(year, by = sex, m = 1) + age + sex,
+            data = pred_dat_freq)
+gam4 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + age + sex,
             data = pred_dat_freq)
 
-appraise(gam1)
-qq_plot(gam1, method = "simulate")
-draw(gam1, residuals = TRUE)
+appraise(gam4)
+qq_plot(gam4, method = "simulate")
+draw(gam4, residuals = TRUE)
 
 
 # calculate derivatives representing significant increases
-der <- derivatives(gam1, type = "central") 
+der <- derivatives(gam4, type = "central") 
 sig_der_years <- der %>% 
   filter(smooth == "s(year)") %>% 
   mutate(
@@ -208,9 +235,8 @@ pred_dat_gam <- pred_dat %>%
   mutate(pred_fl = as.numeric(pred_gam$fit),
          pred_se = as.numeric(pred_gam$se.fit),
          up = pred_fl + (1.96 * pred_se),
-         low = pred_fl - (1.96 * pred_se))# %>% 
-  # left_join(., sig_der_years %>% select(year_f, sig_change), by = "year_f") %>% 
-  # mutate(sig_change2 = ifelse(i))
+         low = pred_fl - (1.96 * pred_se)) %>% 
+  left_join(., reg_key, by = "age")
 
 col_pal <- c("grey60", "blue", "red")
 names(col_pal) <- unique(pred_dat_gam$sig_change)
@@ -224,7 +250,9 @@ pred_gam_plot <- ggplot(pred_dat_gam, aes(x = year, y = pred_fl)) +
              alpha = 0.4) +
   facet_wrap(~age) +
   ggsidekick::theme_sleek() +
-  labs(y = "Predicted Length", x = "Year")
+  labs(y = "Predicted Length", x = "Year") +
+  geom_vline(aes(xintercept = regime_1976), lty = 1) +
+  geom_vline(aes(xintercept = regime_1988), lty = 2)
 
 
 pdf(here::here("outputs", "figs", "annual_gam_preds.pdf"))
@@ -252,21 +280,21 @@ pred_dat_gam %>%
 # compare GAM fit to individual level data relative to annual estimates (includes
 # covariate for run timing)
 dat$age_sex <- factor(paste(dat$age, dat$sex, sep = "_"))
-gam_ind <- gam(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age_sex, m = 1) +
-                 age + sex, data = dat)
+# gam_ind <- gam(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age_sex, m = 1) +
+#                  age + sex, data = dat)
 gam_ind2 <- gam(fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
                  age + sex, data = dat)
-gam_ind3 <- gam(fl ~ s(yday_c) + s(year, m = 2) + age + sex, data = dat)
-AIC(gam_ind, gam_ind2, gam_ind3)
+# gam_ind3 <- gam(fl ~ s(yday_c) + s(year, m = 2) + age + sex, data = dat)
+# AIC(gam_ind, gam_ind2, gam_ind3)
 
 
 #check model diagnostics
-appraise(gam_ind)
-qq_plot(gam_ind, method = "simulate")
-draw(gam_ind, residuals = TRUE)
+appraise(gam_ind2)
+qq_plot(gam_ind2, method = "simulate")
+draw(gam_ind2, residuals = TRUE)
 
 
-pred_gam_ind <- predict.gam(gam_ind, pred_dat, se.fit = TRUE)
+pred_gam_ind <- predict.gam(gam_ind2, pred_dat, se.fit = TRUE)
 pred_dat_gam_ind <- pred_dat %>% 
   mutate(pred_fl = as.numeric(pred_gam_ind$fit),
          pred_se = as.numeric(pred_gam_ind$se.fit),
@@ -305,14 +333,46 @@ brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 4) +
                   age + sex,
                 data = trim_dat)
 brm1 <- brm(
-  fl ~ s(yday_c) + s(year, m = 2) + s(year, by = age, m = 1) +
+  fl ~ s(yday_c) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
        age + sex,
   data = trim_dat, seed = 17,
-  iter = 2000, warmup = 750, thin = 10, cores = 4, refresh = 0,
+  iter = 2500, warmup = 750, thin = 10, cores = 6, refresh = 0,
   # iter = 500, warmup = 1000, thin = 10, cores = 4, refresh = 0,
-  control = list(adapt_delta = 0.95, max_treedepth = 12),
+  control = list(adapt_delta = 0.98, max_treedepth = 12),
   prior=c(prior(normal(613, 20), class="Intercept"),
-          prior(normal(0, 2.5), class="b"))
+          prior(normal(0, 85), class="b", coef = "age52"),
+          prior(normal(0, 85), class="b", coef = "age53"),
+          prior(normal(0, 85), class="b", coef = "age63"),
+          # prior(normal(0, 85), class="b", coef = "sexmale"),
+          prior(normal(0, 2.5), class="b", coef = "syday_c_1"),
+          prior(normal(0, 2.5), class="b", coef = "syear_1"))
 )
 
 saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
+brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
+
+
+post <- as.array(brm1)
+bayesplot::mcmc_trace(post)
+
+
+# posterior predictive checks (student-t similar)
+pp_check(brm1)
+pp_check(brm1, type='stat', stat='mean')
+pp_check(brm1, type='error_scatter_avg')
+pp_check(brm1, type='intervals')
+pp_check(brm1, x = 'yday_c', type='error_scatter_avg_vs_x')
+
+
+post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
+pred_dat_bayes <- pred_dat %>% 
+  mutate(
+    mean = apply(post_pred, 2, mean),
+    low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
+    up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
+  ) 
+
+ggplot(pred_dat_bayes, aes(x = year, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  facet_grid(sex~age)
