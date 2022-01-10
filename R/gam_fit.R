@@ -360,6 +360,7 @@ saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
 brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
 
 
+
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
 

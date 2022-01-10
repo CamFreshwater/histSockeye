@@ -52,7 +52,8 @@ dat2 <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex)
 ) %>% 
-  left_join(., dat, by = c("year_f", "age", "sex"))
+  left_join(., dat, by = c("year_f", "age", "sex")) %>% 
+  filter(sex == "female")
 
 
 # box plots
@@ -67,6 +68,7 @@ annual_box <- ggplot(dat2) +
 mean_dat <- dat2 %>% 
   group_by(year_f, age, period, sex) %>% 
   summarize(
+    mean_yday = mean(yday, na.rm = T),
     sd_yday = sd(yday_c, na.rm = T),
     mean_fl = mean(fl, na.rm = T),
     sd_fl = sd(fl, na.rm = T),
@@ -87,13 +89,13 @@ annual_dot <- ggplot(mean_dat, aes(x = year_f)) +
 
 annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
-  facet_grid(sex~age) +
+  facet_grid(~age) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "SD Fork Length") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = sd_yday, fill = period), shape = 21) +
-  facet_grid(sex~age) +
+  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
   ggsidekick::theme_sleek() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
@@ -113,10 +115,14 @@ brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) +
                   age + sex + period,
                 data = trim_dat)
 
+brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) + 
+                  s(year, by = age, m = 1, k = 5) +
+                  (0 + age) + (0 + sex) + (0 + period),
+                data = trim_dat)
 
 brm1 <- brm(
   bf(
-    fl ~ s(yday_c) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+    fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
       age + sex + period,
     sigma ~ period
   ),
@@ -131,30 +137,21 @@ brm1 <- brm(
   )
 )
 
-# brm2 <- brm(
-#   bf(
-#     fl ~ 0 + s(year, m = 2, k = 5) + age + sex + period,
-#     sigma ~ 0 + period
-#   ),
-#   data = trim_dat, seed = 17,
-#   iter = 500, thin = 10, cores = 6, refresh = 0,
-#   control = list(adapt_delta = 0.9, max_treedepth = 15),
-#   prior=c(prior(normal(600, 150), class="Intercept"),
-#           prior(normal(0, 85), class="b", coef = "age52"),
-#           prior(normal(0, 85), class="b", coef = "age53"),
-#           prior(normal(0, 85), class="b", coef = "age63"),
-#           prior(normal(0, 85), class="b", coef = "sexmale")
-#   )
-# )
-
 
 saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
-brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
+brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
 
 
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
 
+trim_dat %>%
+  droplevels() %>% 
+  add_residual_draws(brm1) %>%
+  median_qi() %>%
+  ggplot(aes(sample = .residual)) +
+  geom_qq() +
+  geom_qq_line()
 
 # posterior predictive checks (student-t similar)
 pp_check(brm1)
@@ -219,7 +216,7 @@ pred_dat <- expand.grid(
   age = unique(dat$age),
   yday_c = 0,
   sex = unique(dat$sex),
-  period = "bilton"
+  period = "GC"
 ) %>% 
  droplevels() 
 
@@ -258,3 +255,58 @@ pred_dat2 %>%
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   facet_grid(sex~age)
+
+
+# visualize year-day effect
+pred_dat3 <- expand.grid(
+  year = mean(dat$year),
+  yday_c = seq(-1, 1, by = 0.01),
+  age = "42",
+  sex = "male",
+  period = "GC"
+) 
+
+post_pred3 <- posterior_predict(brm1, pred_dat3, allow_new_levels = TRUE)
+pred_dat3 %>% 
+  mutate(
+    mean = apply(post_pred3, 2, mean),
+    low = apply(post_pred3, 2, function (x) quantile(x, probs = 0.05)),
+    up = apply(post_pred3, 2, function (x) quantile(x, probs = 0.95))
+  ) %>% 
+  ggplot(., aes(x = yday_c, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek()
+
+
+# predict differences between final year and time series average for each age
+pred_dat4 <- expand.grid(
+  year = seq(min(dat$year), max(dat$year), by = 1),
+  age = unique(dat$age),
+  yday_c = 0,
+  sex = "male",
+  period = "GC"
+) %>% 
+  droplevels()
+post_pred4 <- posterior_predict(brm1, pred_dat4, allow_new_levels = TRUE)
+
+# time series mean by age
+age53 <- post_pred4[ , which(pred_dat4$age == "53")]
+age52 <- post_pred4[ , which(pred_dat4$age == "52")]
+age42 <- post_pred4[ , which(pred_dat4$age == "42")]
+age63 <- post_pred4[ , which(pred_dat4$age == "63")]
+age_list <- list(age53, age52, age42, age63)
+age_names <- c("53", "52", "42", "63")
+
+purrr::map2(age_list, age_names, function (x, y) {
+  #calc time series mean for each iteration
+  mu <- apply(x, 1, mean)
+  diff <- x[ , ncol(x)] - mu
+  data.frame(
+    mean = mean(diff),
+    low = quantile(diff, probs = 0.05),
+    high = quantile(diff, probs = 0.95),
+    age = y
+  )
+}) %>% 
+  bind_rows
