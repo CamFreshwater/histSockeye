@@ -43,14 +43,15 @@ dat <- dat_in %>%
   ))
 
 trim_dat <- dat %>% 
-  sample_n(size = 40000)
+  sample_n(size = 10000)
 
 
 # predictive dataset
 pred_dat <- expand.grid(age = unique(dat$age),
                         yday_c = 0,
                         sex = unique(dat$sex),
-                        year_f = unique(dat$year_f)) %>% 
+                        year_f = unique(dat$year_f),
+                        period = "GC") %>% 
   mutate(
     year = as.numeric(as.character(year_f))
   ) %>% 
@@ -327,28 +328,35 @@ dev.off()
 
 # INDIVIDUAL BAYESIAN GAM ------------------------------------------------------
 
-#check priors (WAY TOO LARGE TO FIT)
-brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 4) + 
-                  s(year, by = age, m = 1, k = 4) +
-                  age + sex,
+#check priors 
+brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) + 
+                  s(year, by = age, m = 1, k = 5) +
+                  age + sex + period,
                 data = trim_dat)
+
+
 brm1 <- brm(
-  fl ~ s(yday_c) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
-       age + sex,
+  bf(
+    fl ~ s(yday_c) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+      age + sex + period,
+    # fl ~ s(year, m = 2, k = 5) + age + sex + period,
+    sigma ~ period
+  ),
   data = trim_dat, seed = 17,
   iter = 2500, warmup = 750, thin = 10, cores = 6, refresh = 0,
   # iter = 500, warmup = 1000, thin = 10, cores = 4, refresh = 0,
-  control = list(adapt_delta = 0.98, max_treedepth = 12),
-  prior=c(prior(normal(613, 20), class="Intercept"),
+  control = list(adapt_delta = 0.98, max_treedepth = 15),
+  prior=c(prior(normal(600, 150), class="Intercept"),
           prior(normal(0, 85), class="b", coef = "age52"),
           prior(normal(0, 85), class="b", coef = "age53"),
           prior(normal(0, 85), class="b", coef = "age63"),
-          # prior(normal(0, 85), class="b", coef = "sexmale"),
-          prior(normal(0, 2.5), class="b", coef = "syday_c_1"),
-          prior(normal(0, 2.5), class="b", coef = "syear_1"))
+          prior(normal(0, 85), class="b", coef = "sexmale")#,
+          # prior(normal(0, 2.5), class="b", coef = "syday_c_1"),
+          # prior(normal(0, 2.5), class="b", coef = "syear_1")
+          )
 )
 
-saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
+saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
 brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind.rds"))
 
 
