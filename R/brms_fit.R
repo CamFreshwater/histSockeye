@@ -115,25 +115,35 @@ brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) +
                   age + sex + period,
                 data = trim_dat)
 
-brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) + 
-                  s(year, by = age, m = 1, k = 5) +
-                  (0 + age) + (0 + sex) + (0 + period),
-                data = trim_dat)
+brms::get_prior(bf(
+  fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
+    s(year, by = age, m = 1, k = 5) +
+    age + sex + period,
+  sigma ~ period
+),
+                data = dat)
 
 brm1 <- brm(
   bf(
-    fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+    fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
+      s(year, by = age, m = 1, k = 5) +
       age + sex + period,
     sigma ~ period
   ),
-  data = trim_dat, seed = 17,
-  iter = 2500, warmup = 750, thin = 10, cores = 6, refresh = 0,
-  control = list(adapt_delta = 0.98, max_treedepth = 15),
+  data = dat, seed = 17,
+  iter = 2000, warmup = 750, thin = 10, cores = 6, refresh = 0,
+  control = list(adapt_delta = 0.95
+                 #, max_treedepth = 15
+                 ),
   prior=c(prior(normal(600, 150), class="Intercept"),
           prior(normal(0, 85), class="b", coef = "age52"),
           prior(normal(0, 85), class="b", coef = "age53"),
           prior(normal(0, 85), class="b", coef = "age63"),
-          prior(normal(0, 85), class="b", coef = "sexmale")
+          prior(normal(0, 85), class="b", coef = "sexmale"),
+          prior(normal(0, 85), class="b", coef = "periodGC"),
+          prior(normal(0, 85), class="b", coef = "periodmod"),
+          prior(normal(0, 2), class="b", coef = "periodmod", dpar = "sigma"),
+          prior(normal(0, 2), class="b", coef = "periodGC", dpar = "sigma")
   )
 )
 
@@ -302,10 +312,12 @@ purrr::map2(age_list, age_names, function (x, y) {
   #calc time series mean for each iteration
   mu <- apply(x, 1, mean)
   diff <- x[ , ncol(x)] - mu
+  diff2 <- x[ , ncol(x)] - x[ , 1]
   data.frame(
-    mean = mean(diff),
-    low = quantile(diff, probs = 0.05),
-    high = quantile(diff, probs = 0.95),
+    mean_diff1 = mean(diff),
+    mean_diff2 = mean(diff2),
+    low = quantile(diff2, probs = 0.05),
+    high = quantile(diff2, probs = 0.95),
     age = y
   )
 }) %>% 

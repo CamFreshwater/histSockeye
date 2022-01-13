@@ -196,6 +196,7 @@ pred_dat_freq$age_sex <- factor(paste(pred_dat_freq$age, pred_dat_freq$sex,
                                       sep = "_"))
 pred_dat$age_sex <- factor(paste(pred_dat$age, pred_dat$sex,
                                       sep = "_"))
+pred_dat_freq$year_c <- scale(pred_dat_freq$year) %>% as.numeric()
 
 gam1 <- gam(fit ~ s(year, m = 2) + s(year, by = age_sex, m = 1) + age + sex,
             data = pred_dat_freq)
@@ -205,6 +206,8 @@ gam3 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) +
               s(year, by = sex, m = 1) + age + sex,
             data = pred_dat_freq)
 gam4 <- gam(fit ~ s(year, m = 2) + s(year, by = age, m = 1) + age + sex,
+            data = pred_dat_freq)
+gam4b <- gam(fit ~ 0 + s(year, m = 2) + s(year, by = age, m = 1) + age:sex,
             data = pred_dat_freq)
 
 appraise(gam4)
