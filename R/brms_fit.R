@@ -33,14 +33,17 @@ dat <- dat_in %>%
   # Add a factor representing sample collection to visualize effects 
   # NOTE: period is not modeled, we're simply assigning a color in the plot to 
   # each data set
-  mutate(period = case_when(
-    year < 1947 ~ "GC",
-    year > 1993 ~ "mod",
-    TRUE ~ "bilton"
-  ))
+  mutate(
+    period = case_when(
+      year < 1947 ~ "GC",
+      year > 1993 ~ "mod",
+      TRUE ~ "bilton"
+    ),
+    fl_cm = fl / 10
+  )
 
 trim_dat <- dat %>% 
-  sample_n(size = 10000)
+  sample_n(size = 20000)
 
 
 
@@ -123,29 +126,36 @@ brms::get_prior(bf(
 ),
                 data = dat)
 
+tictoc::tic()
 brm1 <- brm(
   bf(
-    fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
+    fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
       s(year, by = age, m = 1, k = 5) +
       age + sex + period,
     sigma ~ period
   ),
   data = dat, seed = 17,
+  # iter = 500, thin = 10, cores = 1, chains = 1, refresh = 0,
   iter = 2000, warmup = 750, thin = 10, cores = 6, refresh = 0,
-  control = list(adapt_delta = 0.95
+  control = list(adapt_delta = 0.91
                  #, max_treedepth = 15
                  ),
-  prior=c(prior(normal(600, 150), class="Intercept"),
-          prior(normal(0, 85), class="b", coef = "age52"),
-          prior(normal(0, 85), class="b", coef = "age53"),
-          prior(normal(0, 85), class="b", coef = "age63"),
-          prior(normal(0, 85), class="b", coef = "sexmale"),
-          prior(normal(0, 85), class="b", coef = "periodGC"),
-          prior(normal(0, 85), class="b", coef = "periodmod"),
-          prior(normal(0, 2), class="b", coef = "periodmod", dpar = "sigma"),
-          prior(normal(0, 2), class="b", coef = "periodGC", dpar = "sigma")
+  prior=c(prior(normal(60, 15), class="Intercept"),
+          prior(normal(0, 10), class="b", coef = "age52"),
+          prior(normal(0, 10), class="b", coef = "age53"),
+          prior(normal(0, 10), class="b", coef = "age63"),
+          prior(normal(0, 10), class="b", coef = "sexmale"),
+          prior(normal(0, 10), class="b", coef = "periodGC"),
+          prior(normal(0, 10), class="b", coef = "periodmod"),
+          prior(normal(0, 50), class="b", coef = "syear_1"),
+          prior(normal(0, 10), class="b", coef = "syday_c_1"),
+          prior(normal(0, 2), class="b", dpar = "sigma")#,
+          # prior(normal(0, 2), class="b", coef = "periodmod", dpar = "sigma"),
+          # prior(normal(0, 2), class="b", coef = "periodGC", dpar = "sigma")
   )
 )
+tictoc::toc()
+
 
 
 saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
