@@ -39,11 +39,11 @@ dat <- dat_in %>%
       year > 1993 ~ "mod",
       TRUE ~ "bilton"
     ),
-    fl_cm = fl / 10
+    fl_cm = fl / 10,
+    # add random identifier to split datasets for subsetting,
+    data_group = sample.int(8, nrow(.), replace = T)
   )
 
-trim_dat <- dat %>% 
-  sample_n(size = 20000)
 
 
 
@@ -118,25 +118,49 @@ brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) +
                   age + sex + period,
                 data = trim_dat)
 
-brms::get_prior(bf(
-  fl ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
-    s(year, by = age, m = 1, k = 5) +
-    age + sex + period,
-  sigma ~ period
-),
-                data = dat)
+
+# 
+# trim_dat <- dat %>% 
+#   sample_n(size = 20000)
+# 
+# 
+# ## experiment with multiple; ~4x faster with 20000 samples than running one
+# library(future)
+# plan(multiprocess)
+# 
+# split_dat <- split(dat, dat$data_group)
+# 
+# tictoc::tic()
+# brm_test <- brm_multiple(
+#   bf(
+#     fl_cm ~ #s(yday_c, k = 3) + 
+#       s(year, m = 2, k = 5) +
+#       s(year, by = age, m = 1, k = 5) +
+#       age + sex + period,
+#     sigma ~ period
+#   ),
+#   data = split_dat, seed = 17,
+#   iter = 1000, thin = 10, chains = 2, refresh = 0,# warmup = 750, 
+#   control = list(adapt_delta = 0.94, max_treedepth = 12)
+# )
+# tictoc::toc()
+# 
+# post <- as.array(brm_test)
+# bayesplot::mcmc_trace(brm_test)
+# round(brm_test$rhats, 3)
+# conditional_effects(brm_test, "year")
+
 
 tictoc::tic()
-brm1 <- brm(
+brm1 <- brm_multiple(
   bf(
     fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
       s(year, by = age, m = 1, k = 5) +
       age + sex + period,
     sigma ~ period
   ),
-  data = trim_dat, seed = 17,
-  # iter = 500, thin = 10, cores = 1, chains = 1, refresh = 0,
-  iter = 1000, thin = 10, cores = 6, #refresh = 0, warmup = 750, 
+  data = split_dat, seed = 17,
+  iter = 1500, thin = 10, chains = 2, #refresh = 0, warmup = 750, 
   control = list(adapt_delta = 0.93, max_treedepth = 12
                  ),
   prior=c(prior(normal(60, 15), class="Intercept"),
@@ -155,16 +179,15 @@ brm1 <- brm(
 )
 tictoc::toc()
 
-
-
 saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
-brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
-
+# brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
 
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
+round(brm1$rhats, 3)
+conditional_effects(brm1, "year")
 
-trim_dat %>%
+dat %>%
   droplevels() %>% 
   add_residual_draws(brm1) %>%
   median_qi() %>%
@@ -178,6 +201,10 @@ pp_check(brm1, type='stat', stat='mean')
 pp_check(brm1, type='error_scatter_avg')
 pp_check(brm1, type='intervals')
 pp_check(brm1, x = 'yday_c', type='error_scatter_avg_vs_x')
+
+mcmc_plot(brm_test, type = "neff_hist")
+mcmc_plot(brm_test, type = "neff")
+mcmc_plot(brm_test, type = "hist")
 
 
 ## POSTERIOR ESTIMATES ---------------------------------------------------------
