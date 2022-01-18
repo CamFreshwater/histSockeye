@@ -134,11 +134,10 @@ brm1 <- brm(
       age + sex + period,
     sigma ~ period
   ),
-  data = dat, seed = 17,
+  data = trim_dat, seed = 17,
   # iter = 500, thin = 10, cores = 1, chains = 1, refresh = 0,
-  iter = 2000, warmup = 750, thin = 10, cores = 6, refresh = 0,
-  control = list(adapt_delta = 0.91
-                 #, max_treedepth = 15
+  iter = 1000, thin = 10, cores = 6, #refresh = 0, warmup = 750, 
+  control = list(adapt_delta = 0.93, max_treedepth = 12
                  ),
   prior=c(prior(normal(60, 15), class="Intercept"),
           prior(normal(0, 10), class="b", coef = "age52"),
@@ -158,7 +157,7 @@ tictoc::toc()
 
 
 
-saveRDS(brm1, here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
+saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "trim_ind_ls.rds"))
 
 
