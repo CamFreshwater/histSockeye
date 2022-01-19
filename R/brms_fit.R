@@ -390,9 +390,13 @@ fit_yday <- pred_dat3 %>%
 
 png(here::here("outputs", "figs", "smooth_yday.png"), 
     height = 4.5, width = 4.5, units = "in", res = 250)
-smooth_yday
+pp_yday
 dev.off()
 
+png(here::here("outputs", "figs", "fit_smooth_yday.png"), 
+    height = 4.5, width = 4.5, units = "in", res = 250)
+fit_yday
+dev.off()
 
 
 # predict differences between final year and time series average for each age
