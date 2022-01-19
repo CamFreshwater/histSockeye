@@ -367,27 +367,32 @@ pred_dat3 <- expand.grid(
   yday_c = seq(-46, 64, by = 0.1),
   age = "42",
   sex = "male",
-  period = "GC"
+  period = "mod"
 ) 
 
-post_pred3 <- posterior_predict(brm1, pred_dat3, allow_new_levels = TRUE)
-smooth_yday <- pred_dat3 %>% 
-  mutate(
-    median = apply(post_pred3, 2, median),
-    low = apply(post_pred3, 2, function (x) quantile(x, probs = 0.05)),
-    up = apply(post_pred3, 2, function (x) quantile(x, probs = 0.95))
-  ) %>% 
-  ggplot(., aes(x = yday_c, y = median)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+pp_yday <- pred_dat3 %>% 
+  add_predicted_draws(model = brm1, re_formula = NULL, 
+                      allow_new_levels = TRUE) 
+  ggplot(., aes(x = yday_c)) +
+  stat_lineribbon(aes(y = .prediction), 
+                  .width = c(.9, .5), alpha = 0.25) +
   ggsidekick::theme_sleek() +
   labs(x = "Centered Year Day", y = "Fork Length (cm)")
 
+fit_yday <- pred_dat3 %>% 
+  add_fitted_draws(model = brm1, re_formula = NULL,
+                        allow_new_levels = TRUE) %>%
+  ggplot(., aes(x = yday_c)) +
+  stat_lineribbon(aes(y = .value), 
+                  .width = c(.9, .5), alpha = 0.25) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Centered Year Day", y = "Fork Length (cm)")
 
 png(here::here("outputs", "figs", "smooth_yday.png"), 
     height = 4.5, width = 4.5, units = "in", res = 250)
 smooth_yday
 dev.off()
+
 
 
 # predict differences between final year and time series average for each age
@@ -444,8 +449,57 @@ gam1 <- gam(
   method = "REML"
 )
 
+AIC(gam1, gam2, gam3)
+
 mgcv_splines <- draw(gam1)
 
 pdf(here::here("outputs", "figs", "gam_fit_summary.pdf"))
 mgcv_splines
 dev.off()
+
+
+## 
+gam2 <- gam(
+  fl_cm ~ s(yday_c, k = 3) + #s(year, m = 2, k = 5) + 
+    s(year, by = age, m = 2, k = 5) +
+    age + sex + period, 
+  data = dat,
+  method = "REML"
+)
+gam3 <- gam(
+  fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
+    # s(year, by = age, m = , k = 5) +
+    age + sex + period, 
+  data = dat,
+  method = "REML"
+)
+# aic supports global smooth
+AIC(gam1, gam2, gam3)
+
+
+# check centering categorical variables' effect
+c_dat <- fastDummies::dummy_cols(dat %>% droplevels(), 
+                                 select_columns = c("sex", "age")) %>% 
+  mutate(
+    sex_female = as.numeric(scale(sex_female, center = T, scale = F)),
+    sex_male = as.numeric(scale(sex_male, center = T, scale = F)),
+    age_42 = as.numeric(scale(age_42, center = T, scale = F)),
+    age_52 = as.numeric(scale(age_52, center = T, scale = F)),
+    age_53 = as.numeric(scale(age_53, center = T, scale = F)),
+    age_63 = as.numeric(scale(age_63, center = T, scale = F))
+  ) %>% 
+  glimpse()
+gam2b <- gam(
+  fl_cm ~ 0 + s(yday_c, k = 3) + #s(year, m = 2, k = 5) + 
+    s(year, by = age, m = 2, k = 5) +
+    sex_female + sex_male + age_42 + age_52 + age_53 + age_63, 
+  data = c_dat,
+  method = "REML"
+)
+gam2 <- gam(
+  fl_cm ~ s(yday_c, k = 3) + #s(year, m = 2, k = 5) + 
+    s(year, by = age, m = 2, k = 5) +
+    age + sex, 
+  data = c_dat,
+  method = "REML"
+)
