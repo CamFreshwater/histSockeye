@@ -18,7 +18,7 @@ colnames(dat_in) <- c("year", "month", "day", "hart_species", "sex", "age",
 dat <- dat_in %>% 
   mutate(
     year_f = as.factor(year),
-    sex = ifelse(sex == 1, "male", "female"),
+    sex = ifelse(sex == 1, "male", "female") %>% as.factor(),
     age = factor(as.character(age)),
     date = as.POSIXct(paste(day, month, year, sep = "-"),
                       format = "%d-%m-%Y"),
@@ -239,7 +239,7 @@ dev.off()
 draws <- as_draws_array(brm1)
 sum_draws <- summarise_draws(draws, default_summary_measures())
 
-## coefficient estimates for fixed effects for period of mu 
+## coefficient estimates for fixed effects for period  
 mu_post_bilton <- draws[ , ,"b_Intercept"]
 mu_post_gc <- draws[ , , "b_Intercept"] + draws[ , , "b_periodGC"]
 mu_post_mod <- draws[ , , "b_Intercept"] + draws[ , , "b_periodmod"] 
@@ -253,6 +253,50 @@ mu_df <- data.frame(
   high = purrr::map(mu_list, quantile, 0.95) %>% unlist(),
   parameter = "mu"
 )
+
+
+## coefficient estimates for fixed effects for age (assuming female and bilton)
+mu_post_42 <- mu_post_bilton
+mu_post_52 <- draws[ , , "b_Intercept"] + draws[ , , "b_age52"]
+mu_post_53 <- draws[ , , "b_Intercept"] + draws[ , , "b_age53"]
+mu_post_63 <- draws[ , , "b_Intercept"] + draws[ , , "b_age63"]
+mu_age_list <- list(mu_post_42, mu_post_52, mu_post_53, mu_post_63)
+
+data.frame(
+  age = c("42", "52", "53", "63"),
+  median = purrr::map(mu_age_list, median) %>% unlist(),
+  low = purrr::map(mu_age_list, quantile, 0.05) %>% unlist(),
+  high = purrr::map(mu_age_list, quantile, 0.95) %>% unlist(),
+  parameter = "mu_age"
+) %>% 
+  ggplot(.) +
+  geom_pointrange(aes(x = age, y = median, fill = age, 
+                      ymin = low, ymax = high),
+                  shape = 21) +
+  facet_wrap(~parameter, scales = "free_y") +
+  ggsidekick::theme_sleek() +
+  labs(x = "Age Class", y = "Posterior Estimate") 
+  
+
+## coefficient estimates for fixed effects for sex (assuming 42 and bilton)
+mu_post_fem <- mu_post_bilton
+mu_post_male <- draws[ , , "b_Intercept"] + draws[ , , "b_sexmale"]
+mu_sex_list <- list(mu_post_fem, mu_post_male)
+
+data.frame(
+  age = c("female", "male"),
+  median = purrr::map(mu_sex_list, median) %>% unlist(),
+  low = purrr::map(mu_sex_list, quantile, 0.05) %>% unlist(),
+  high = purrr::map(mu_sex_list, quantile, 0.95) %>% unlist(),
+  parameter = "mu_sex"
+) %>% 
+  ggplot(.) +
+  geom_pointrange(aes(x = sex, y = median, fill = sex, 
+                      ymin = low, ymax = high),
+                  shape = 21) +
+  facet_wrap(~parameter, scales = "free_y") +
+  ggsidekick::theme_sleek() +
+  labs(x = "Sex", y = "Posterior Estimate") 
 
 
 ## as above for sigma
@@ -462,7 +506,7 @@ mgcv_splines
 dev.off()
 
 
-## 
+## check validity of different age-specific smoothing structures
 gam2 <- gam(
   fl_cm ~ s(yday_c, k = 3) + #s(year, m = 2, k = 5) + 
     s(year, by = age, m = 2, k = 5) +
@@ -470,15 +514,26 @@ gam2 <- gam(
   data = dat,
   method = "REML"
 )
+gam2b <- gam(
+  fl_cm ~ s(yday_c, k = 3, by = age) + s(year, m = 2, k = 5, by = age) + 
+    # s(year, by = age, m = , k = 5) +
+    age + sex + period, 
+  data = dat,
+  method = "REML"
+)
 gam3 <- gam(
   fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
-    # s(year, by = age, m = , k = 5) +
     age + sex + period, 
   data = dat,
   method = "REML"
 )
 # aic supports global smooth
 AIC(gam1, gam2, gam3)
+AIC(gam2, gam2b)
+
+plot(gam2)
+plot(gam2b)
+plot(gam3)
 
 
 # check centering categorical variables' effect
