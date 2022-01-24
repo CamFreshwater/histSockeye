@@ -36,12 +36,14 @@ dat <- dat_in %>%
   mutate(
     period = case_when(
       year < 1947 ~ "Gilbert-Clemens",
+      year > 1972 & year < 1994 ~ "Monkley Dump",
       year > 1993 ~ "Nisga'a",
       TRUE ~ "Bilton"
     ),
     period = fct_relevel(as.factor(period), 
                          "Gilbert-Clemens",
                          "Bilton",
+                         "Monkley Dump",
                          "Nisga'a"),
     fl_cm = fl / 10,
     # add random identifier to split datasets for subsetting,
@@ -86,11 +88,15 @@ mean_dat <- dat2 %>%
     mean_fl = mean(fl, na.rm = T),
     sd_fl = sd(fl, na.rm = T),
     se_fl = sd_fl / sqrt(n),
-    up = mean_fl + sd_fl,#(1.96 * se_fl),
-    lo = mean_fl - sd_fl,#(1.96 * se_fl),
+    up = mean_fl + (1.96 * se_fl),
+    lo = mean_fl - (1.96 * se_fl),
     .groups = "drop"
   ) %>% 
   distinct() %>% 
+  group_by(age, sex) %>% 
+  mutate(
+    overall_mean = mean(mean_fl, na.rm = T)
+  ) %>% 
   ungroup() 
 
 annual_dot <- ggplot(mean_dat %>% 
@@ -101,7 +107,8 @@ annual_dot <- ggplot(mean_dat %>%
   facet_wrap(~age) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  geom_hline(aes(yintercept = overall_mean))
 
 annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
@@ -364,6 +371,17 @@ png(here::here("outputs", "figs", "smooth_1period.png"),
 smooth_pred1
 dev.off()
 
+# as above but with fitted draws, not posterior predictions
+fit_year <- pred_dat %>% 
+  add_fitted_draws(model = brm1, re_formula = NULL,
+                   allow_new_levels = TRUE) %>%
+  ggplot(., aes(x = year)) +
+  stat_lineribbon(aes(y = .value), 
+                  .width = c(.9, .5), alpha = 0.25) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (cm)") +
+  facet_grid(sex~age) 
+
 
 
 # second predictive dataset associates years with periods (approximate)
@@ -416,7 +434,7 @@ pred_dat3 <- expand.grid(
 
 pp_yday <- pred_dat3 %>% 
   add_predicted_draws(model = brm1, re_formula = NULL, 
-                      allow_new_levels = TRUE) 
+                      allow_new_levels = TRUE) %>% 
   ggplot(., aes(x = yday_c)) +
   stat_lineribbon(aes(y = .prediction), 
                   .width = c(.9, .5), alpha = 0.25) +
@@ -496,6 +514,9 @@ gam1 <- gam(
   data = dat,
   method = "REML"
 )
+
+lm1 <- lm(fl_cm ~ yday_c + year_f + age + sex, 
+          data = dat)
 
 AIC(gam1, gam2, gam3)
 
