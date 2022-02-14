@@ -6,10 +6,13 @@
 # Created by C Freshwater Dec 23, 2021
 # -------------------------------------------------
 
+#TODO: fix year axis labels
+
 library(tidyverse)
 library(brms)
 library(tidybayes)
 library(posterior)
+
 
 # import nass data
 dat_in <- read.table(here::here("data", "nasscentury.txt"))
@@ -48,7 +51,8 @@ dat <- dat_in %>%
     fl_cm = fl / 10,
     # add random identifier to split datasets for subsetting,
     data_group = sample.int(5, nrow(.), replace = T)
-  )
+  ) %>% 
+  droplevels()
 
 
 # RAW DATA PLOTS ---------------------------------------------------------------
@@ -97,7 +101,8 @@ mean_dat <- dat2 %>%
   mutate(
     overall_mean = mean(mean_fl, na.rm = T)
   ) %>% 
-  ungroup() 
+  ungroup() %>% 
+  droplevels()
 
 annual_dot <- ggplot(mean_dat %>% 
                        filter(sex == "female"), 
@@ -108,7 +113,7 @@ annual_dot <- ggplot(mean_dat %>%
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  geom_hline(aes(yintercept = overall_mean))
+  geom_hline(aes(yintercept = overall_mean), lty = 2)
 
 annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
@@ -137,70 +142,63 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-#check priors 
-brms::get_prior(fl ~ s(yday_c) + s(year, m = 2, k = 5) + 
-                  s(year, by = age, m = 1, k = 5) +
-                  age + sex + period,
-                data = dat)
+# parallelize based on operating system (should speed up some of the spatial
+# processing calculations)
+library(parallel)
+ncores <- detectCores() - 2
+if (Sys.info()['sysname'] == "Windows") {
+  library(doParallel)
+  cl <- makeCluster(ncores)
+  registerDoParallel(cl)
+} else {
+  doMC::registerDoMC(ncores)
+}
 
-library(future)
-plan(multiprocess)
+
+#check priors 
+brms::get_prior(bf(
+  fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+    s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+    age + sex + period,
+  sigma ~ period
+),
+data = dat)
+
+# library(future)
+# plan(multiprocess)
 
 split_dat <- split(dat, dat$data_group)
 
 
-# trim_dat <- dat %>% 
-#   sample_n(size = 20000)
-# 
-# 
-# ## experiment with multiple; ~4x faster with 20000 samples than running one
-# 
-# tictoc::tic()
-# brm_test <- brm_multiple(
-#   bf(
-#     fl_cm ~ #s(yday_c, k = 3) + 
-#       s(year, m = 2, k = 5) +
-#       s(year, by = age, m = 1, k = 5) +
-#       age + sex + period,
-#     sigma ~ period
-#   ),
-#   data = split_dat, seed = 17,
-#   iter = 1000, thin = 10, chains = 2, refresh = 0,# warmup = 750, 
-#   control = list(adapt_delta = 0.94, max_treedepth = 12)
-# )
-# tictoc::toc()
-# 
-# post <- as.array(brm_test)
-# bayesplot::mcmc_trace(brm_test)
-# round(brm_test$rhats, 3)
-# conditional_effects(brm_test, "year")
+# trim_dat <- dat %>%
+#   sample_n(size = 20000) %>% 
+#   split(., .$data_group)
 
 
 tictoc::tic()
 brm1 <- brm_multiple(
   bf(
-    fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
-      s(year, by = age, m = 1, k = 5) +
+    fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+      s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
       age + sex + period,
     sigma ~ period
   ),
   data = split_dat, seed = 17,
-  iter = 2000, thin = 10, chains = 3, warmup = 750, #refresh = 0,  
-  control = list(adapt_delta = 0.95, max_treedepth = 12
+  iter = 2250, thin = 10, chains = 3, warmup = 750, #refresh = 0,  
+  control = list(adapt_delta = 0.97, max_treedepth = 14
                  ),
   prior=c(prior(normal(60, 15), class="Intercept"),
-          prior()
-          prior(normal(0, 10), class="b", coef = "age52"),
-          prior(normal(0, 10), class="b", coef = "age53"),
-          prior(normal(0, 10), class="b", coef = "age63"),
-          prior(normal(0, 10), class="b", coef = "sexmale"),
-          prior(normal(0, 10), class="b", coef = "periodGC"),
-          prior(normal(0, 10), class="b", coef = "periodmod"),
-          prior(normal(0, 50), class="b", coef = "syear_1"),
-          prior(normal(0, 10), class="b", coef = "syday_c_1"),
-          prior(normal(0, 2), class="b", dpar = "sigma")#,
-          # prior(normal(0, 2), class="b", coef = "periodmod", dpar = "sigma"),
-          # prior(normal(0, 2), class="b", coef = "periodGC", dpar = "sigma")
+          prior(normal(5, 10), class="b", coef = "age52"),
+          prior(normal(5, 10), class="b", coef = "age53"),
+          prior(normal(5, 10), class="b", coef = "age63"),
+          prior(normal(5, 10), class="b", coef = "sexmale"),
+          prior(normal(0, 10), class="b", coef = "periodBilton"),
+          prior(normal(0, 10), class="b", coef = "periodMonkleyDump"),
+          prior(normal(0, 10), class="b", coef = "periodNisgaa"),
+          prior(normal(0, 30), class="b", coef = "syear_1"),
+          prior(normal(0, 30), class="b", coef = "syday_c_1"),
+          prior(normal(0, 10), class="b", dpar = "sigma"),
+          prior(exponential(0.5), class = "Intercept", dpar = "sigma")
   )
 )
 tictoc::toc()
@@ -214,13 +212,14 @@ round(brm1$rhats, 3)
 conditional_effects(brm1, "year")
 
 dat %>%
+  droplevels() %>% 
   add_residual_draws(brm1) %>%
   median_qi() %>%
   ggplot(aes(sample = .residual)) +
   geom_qq() +
   geom_qq_line()
 
-# posterior predictive checks (student-t similar)
+# posterior predictive checks 
 pp_check(brm1)
 pp_check(brm1, type='stat', stat='mean')
 pp_check(brm1, type='error_scatter_avg')
@@ -229,9 +228,9 @@ pp_check(brm1, type='intervals')
 pp_check(brm1, type='scatter_avg')
 pp_check(brm1, x = 'yday_c', type='error_scatter_avg_vs_x')
 
-mcmc_plot(brm_test, type = "neff_hist")
-mcmc_plot(brm_test, type = "neff")
-mcmc_plot(brm_test, type = "hist")
+mcmc_plot(brm1, type = "neff_hist")
+mcmc_plot(brm1, type = "neff")
+mcmc_plot(brm1, type = "hist")
 
 msms <- conditional_smooths(brm1)
 tt <- plot(msms)
@@ -247,23 +246,36 @@ draws <- as_draws_array(brm1)
 sum_draws <- summarise_draws(draws, default_summary_measures())
 
 ## coefficient estimates for fixed effects for period  
-mu_post_bilton <- draws[ , ,"b_Intercept"]
-mu_post_gc <- draws[ , , "b_Intercept"] + draws[ , , "b_periodGC"]
-mu_post_mod <- draws[ , , "b_Intercept"] + draws[ , , "b_periodmod"] 
+mu_post_bilton <- draws[ , ,"b_Intercept"] + draws[ , , "b_periodBilton"]
+mu_post_gc <- draws[ , , "b_Intercept"] 
+mu_post_mod <- draws[ , , "b_Intercept"] + draws[ , , "b_periodNisgaa"]
+mu_post_dfo <- draws[ , , "b_Intercept"] + draws[ , , "b_periodMonkleyDump"] 
 mu_list <- list(mu_post_gc,
-                   mu_post_bilton,
-                   mu_post_mod)
+                mu_post_bilton,
+                mu_post_dfo,
+                mu_post_mod)
 mu_df <- data.frame(
-  period = c("Gilbert-Clemens", "Bilton", "Nisga'a"),
+  period = c("Gilbert-Clemens", "Bilton", "Monkley Dump", "Nisga'a"),
   median = purrr::map(mu_list, median) %>% unlist(),
   low = purrr::map(mu_list, quantile, 0.05) %>% unlist(),
   high = purrr::map(mu_list, quantile, 0.95) %>% unlist(),
   parameter = "mu"
-)
+) 
+mu_df$period = fct_relevel(as.factor(mu_df$period),
+                           "Gilbert-Clemens", "Bilton", "Monkley Dump",
+                           "Nisga'a")
+
+ggplot(mu_df) +
+  geom_pointrange(aes(x = period, y = median, fill = period, 
+                      ymin = low, ymax = high),
+                  shape = 21) +
+  facet_wrap(~parameter, scales = "free_y") +
+  ggsidekick::theme_sleek() +
+  labs(x = "Age Class", y = "Posterior Estimate") 
 
 
 ## coefficient estimates for fixed effects for age (assuming female and bilton)
-mu_post_42 <- mu_post_bilton
+mu_post_42 <- mu_post_gc
 mu_post_52 <- draws[ , , "b_Intercept"] + draws[ , , "b_age52"]
 mu_post_53 <- draws[ , , "b_Intercept"] + draws[ , , "b_age53"]
 mu_post_63 <- draws[ , , "b_Intercept"] + draws[ , , "b_age63"]
@@ -286,12 +298,12 @@ data.frame(
   
 
 ## coefficient estimates for fixed effects for sex (assuming 42 and bilton)
-mu_post_fem <- mu_post_bilton
+mu_post_fem <- mu_post_gc
 mu_post_male <- draws[ , , "b_Intercept"] + draws[ , , "b_sexmale"]
 mu_sex_list <- list(mu_post_fem, mu_post_male)
 
 data.frame(
-  age = c("female", "male"),
+  sex = c("female", "male"),
   median = purrr::map(mu_sex_list, median) %>% unlist(),
   low = purrr::map(mu_sex_list, quantile, 0.05) %>% unlist(),
   high = purrr::map(mu_sex_list, quantile, 0.95) %>% unlist(),
@@ -307,25 +319,34 @@ data.frame(
 
 
 ## as above for sigma
-sigma_post_bilton <- draws[ , ,"b_sigma_Intercept"]
-sigma_post_gc <- draws[ , , "b_sigma_Intercept"] + 
-  draws[ , , "b_sigma_periodGC"]
+sigma_post_bilton <- draws[ , ,"b_sigma_Intercept"] + 
+  draws[ , , "b_sigma_periodBilton"]
+sigma_post_gc <- draws[ , , "b_sigma_Intercept"] 
 sigma_post_mod <- draws[ , , "b_sigma_Intercept"] + 
-  draws[ , , "b_sigma_periodmod"] 
+  draws[ , , "b_sigma_periodNisgaa"]
+sigma_post_dfo <- draws[ , , "b_sigma_Intercept"] + 
+  draws[ , , "b_sigma_periodMonkleyDump"] 
 sigma_list <- list(sigma_post_gc,
                    sigma_post_bilton,
+                   sigma_post_dfo,
                    sigma_post_mod)
+
+
 sigma_df <- data.frame(
-  period = c("Gilbert-Clemens", "Bilton", "Nisga'a"),
+  period = c("Gilbert-Clemens", "Bilton", "Monkley Dump", "Nisga'a"),
   median = purrr::map(sigma_list, median) %>% unlist(),
   low = purrr::map(sigma_list, quantile, 0.05) %>% unlist(),
   high = purrr::map(sigma_list, quantile, 0.95) %>% unlist(),
   parameter = "sigma"
 ) 
+sigma_df$period = fct_relevel(as.factor(sigma_df$period),
+                           "Gilbert-Clemens", "Bilton", "Monkley Dump",
+                           "Nisga'a")
+
 
 period_est <- rbind(mu_df, sigma_df) %>% 
-  mutate(period = fct_relevel(factor(period),
-                              "Gilbert-Clemens", "Bilton", "Nisga'a")) %>% 
+  # mutate(period = fct_relevel(factor(period),
+  #                             "Gilbert-Clemens", "Bilton", "Nisga'a")) %>% 
   ggplot(.) +
   geom_pointrange(aes(x = period, y = median, fill = period, 
                       ymin = low, ymax = high),
@@ -347,7 +368,7 @@ pred_dat <- expand.grid(
   age = unique(dat$age),
   yday_c = 0,
   sex = unique(dat$sex),
-  period = "GC"
+  period = "Gilbert-Clemens"
 ) %>% 
  droplevels() 
 
@@ -371,6 +392,7 @@ png(here::here("outputs", "figs", "smooth_1period.png"),
 smooth_pred1
 dev.off()
 
+
 # as above but with fitted draws, not posterior predictions
 fit_year <- pred_dat %>% 
   add_fitted_draws(model = brm1, re_formula = NULL,
@@ -382,16 +404,27 @@ fit_year <- pred_dat %>%
   labs(x = "Year", y = "Fork Length (cm)") +
   facet_grid(sex~age) 
 
+png(here::here("outputs", "figs", "smooth_1period_fit.png"), 
+    height = 4, width = 7.5, units = "in", res = 250)
+fit_year
+dev.off()
+
 
 
 # second predictive dataset associates years with periods (approximate)
 pred_dat2 <- pred_dat %>% 
   mutate(
     period = case_when(
-      year < 1947 ~ "GC",
-      year > 1993 ~ "mod",
-      TRUE ~ "bilton"
-    )
+      year < 1947 ~ "Gilbert-Clemens",
+      year > 1972 & year < 1994 ~ "Monkley Dump",
+      year > 1993 ~ "Nisga'a",
+      TRUE ~ "Bilton"
+    ),
+    period = fct_relevel(as.factor(period), 
+                         "Gilbert-Clemens",
+                         "Bilton",
+                         "Monkley Dump",
+                         "Nisga'a")
   )
 mean_dat$year <- as.numeric(as.character(mean_dat$year_f))
 mean_dat$mean_fl_cm <- mean_dat$mean_fl / 10
@@ -416,7 +449,7 @@ smooth_pred2 <- post_ribbon2 +
              shape = 21, alpha = 0.4) +
   labs(x = "Year", y = "Fork Length (cm)")
 
-png(here::here("outputs", "figs", "smooth_3periods.png"), 
+png(here::here("outputs", "figs", "smooth_4periods.png"), 
     height = 4, width = 7.5,
     units = "in", res = 250)
 smooth_pred2
@@ -427,9 +460,9 @@ dev.off()
 pred_dat3 <- expand.grid(
   year = mean(dat$year),
   yday_c = seq(-46, 64, by = 0.1),
-  age = "42",
+  age = unique(dat$age),
   sex = "male",
-  period = "mod"
+  period = "Gilbert-Clemens"
 ) 
 
 pp_yday <- pred_dat3 %>% 
@@ -439,7 +472,8 @@ pp_yday <- pred_dat3 %>%
   stat_lineribbon(aes(y = .prediction), 
                   .width = c(.9, .5), alpha = 0.25) +
   ggsidekick::theme_sleek() +
-  labs(x = "Centered Year Day", y = "Fork Length (cm)")
+  labs(x = "Centered Year Day", y = "Fork Length (cm)") +
+  facet_wrap(~age)
 
 fit_yday <- pred_dat3 %>% 
   add_fitted_draws(model = brm1, re_formula = NULL,
@@ -448,7 +482,8 @@ fit_yday <- pred_dat3 %>%
   stat_lineribbon(aes(y = .value), 
                   .width = c(.9, .5), alpha = 0.25) +
   ggsidekick::theme_sleek() +
-  labs(x = "Centered Year Day", y = "Fork Length (cm)")
+  labs(x = "Centered Year Day", y = "Fork Length (cm)") +
+  facet_wrap(~age)
 
 png(here::here("outputs", "figs", "smooth_yday.png"), 
     height = 4.5, width = 4.5, units = "in", res = 250)
@@ -469,11 +504,18 @@ pred_dat4 <- expand.grid(
   sex = "male"
   ) %>% 
   mutate(
-    period = case_when(
-      year < 1947 ~ "GC",
-      year > 1993 ~ "mod",
-      TRUE ~ "bilton"
-    )
+    period = "Gilbert-Clemens"
+    # period = case_when(
+    #   year < 1947 ~ "Gilbert-Clemens",
+    #   year > 1972 & year < 1994 ~ "Monkley Dump",
+    #   year > 1993 ~ "Nisga'a",
+    #   TRUE ~ "Bilton"
+    # ),
+    # period = fct_relevel(as.factor(period), 
+    #                      "Gilbert-Clemens",
+    #                      "Bilton",
+    #                      "Monkley Dump",
+    #                      "Nisga'a")
   ) %>% 
   droplevels()
 post_pred4 <- posterior_predict(brm1, pred_dat4, allow_new_levels = TRUE)
@@ -489,7 +531,9 @@ age_names <- c("53", "52", "42", "63")
 purrr::map2(age_list, age_names, function (x, y) {
   #calc time series mean for each iteration
   mu <- apply(x, 1, mean)
+  #difference from mean
   diff <- x[ , ncol(x)] - mu
+  #difference from first obs
   diff2 <- x[ , ncol(x)] - x[ , 1]
   data.frame(
     mean_diff1 = mean(diff),
@@ -508,12 +552,27 @@ library(mgcv)
 library(gratia)
 
 gam1 <- gam(
-  fl_cm ~ s(yday_c, k = 3) + s(year, m = 2, k = 5) + 
+  fl_cm ~ s(yday_c, k = 3, by = age) + s(year, m = 2, k = 5) + 
     s(year, by = age, m = 1, k = 5) +
     age + sex + period, 
   data = dat,
   method = "REML"
 )
+gam2 <- gam(
+  fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+    s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+    age + sex + period, 
+  data = dat,
+  method = "REML"
+)
+gam3 <- gam(
+  fl_cm ~ s(yday_c, by = age, m = 2, k = 3) +  s(year, by = age, m = 2, k = 5) +
+    age + sex + period, 
+  data = dat,
+  method = "REML"
+)
+
+
 
 lm1 <- lm(fl_cm ~ yday_c + year_f + age + sex, 
           data = dat)
