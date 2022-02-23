@@ -6,7 +6,6 @@
 # Created by C Freshwater Dec 23, 2021
 # -------------------------------------------------
 
-#TODO: fix year axis labels
 
 library(tidyverse)
 library(brms)
@@ -31,7 +30,8 @@ dat <- dat_in %>%
   #drop secondary age classes and years missing capture data
   filter(
     age %in% c("42", "52", "53", "63"),
-    !is.na(yday)
+    !is.na(yday),
+    !is.na(fl)
   )  %>%
   # Add a factor representing sample collection to visualize effects 
   # NOTE: period is not modeled, we're simply assigning a color in the plot to 
@@ -99,45 +99,53 @@ mean_dat <- dat2 %>%
   distinct() %>% 
   group_by(age, sex) %>% 
   mutate(
-    overall_mean = mean(mean_fl, na.rm = T)
-  ) %>% 
+    overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
-  droplevels()
+  droplevels() 
+levels(mean_dat$age) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
-annual_dot <- ggplot(mean_dat %>% 
-                       filter(sex == "female"), 
-                     aes(x = year_f)) +
+
+annual_dot <- ggplot(
+  mean_dat %>% 
+    filter(sex == "female",
+           !is.na(period)), 
+  aes(x = as.numeric(as.character(year_f)))
+) +
   geom_pointrange(aes(y = mean_fl, fill = period, ymin = lo, ymax = up),
                   shape = 21) +
-  facet_wrap(~age) +
+  facet_wrap(~age, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
-  geom_hline(aes(yintercept = overall_mean), lty = 2)
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  ) +
+  geom_hline(aes(yintercept = overall_mean), lty = 2) +
+  scale_fill_discrete(name = "Sampling\nPeriod")
 
-annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = sd_fl, fill = period), shape = 21) +
-  facet_grid(~age) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "SD Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
-  facet_wrap(~age) +
-  ggsidekick::theme_sleek() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
+#   facet_grid(~age) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "SD Fork Length") +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+#   facet_wrap(~age) +
+#   ggsidekick::theme_sleek() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
 # export
-png(here::here("outputs", "figs", "annual_dot.png"), width = 11, height = 7,
+png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
     res = 250, units = "in")
 annual_dot
 dev.off()
 
-png(here::here("outputs", "figs", "annual_box.png"), width = 11, height = 7,
-    res = 250, units = "in")
-annual_box
-dev.off()
+# png(here::here("outputs", "figs", "annual_box.png"), width = 11, height = 7,
+#     res = 250, units = "in")
+# annual_box
+# dev.off()
 
 
 # FIT MODEL  -------------------------------------------------------------------
@@ -203,7 +211,7 @@ brm1 <- brm_multiple(
 )
 tictoc::toc()
 
-saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
+# saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 
 post <- as.array(brm1)
@@ -258,20 +266,19 @@ mu_df <- data.frame(
   period = c("Gilbert-Clemens", "Bilton", "Monkley Dump", "Nisga'a"),
   median = purrr::map(mu_list, median) %>% unlist(),
   low = purrr::map(mu_list, quantile, 0.05) %>% unlist(),
-  high = purrr::map(mu_list, quantile, 0.95) %>% unlist(),
-  parameter = "mu"
+  high = purrr::map(mu_list, quantile, 0.95) %>% unlist()
 ) 
 mu_df$period = fct_relevel(as.factor(mu_df$period),
                            "Gilbert-Clemens", "Bilton", "Monkley Dump",
                            "Nisga'a")
 
-ggplot(mu_df) +
+area_eff_dot <- ggplot(mu_df) +
   geom_pointrange(aes(x = period, y = median, fill = period, 
                       ymin = low, ymax = high),
                   shape = 21) +
-  facet_wrap(~parameter, scales = "free_y") +
   ggsidekick::theme_sleek() +
-  labs(x = "Age Class", y = "Posterior Estimate") 
+  labs(x = "Sampling Period", y = "Posterior Estimate Mean") +
+  theme(legend.position = "none")
 
 
 ## coefficient estimates for fixed effects for age (assuming female and bilton)
@@ -281,20 +288,23 @@ mu_post_53 <- draws[ , , "b_Intercept"] + draws[ , , "b_age53"]
 mu_post_63 <- draws[ , , "b_Intercept"] + draws[ , , "b_age63"]
 mu_age_list <- list(mu_post_42, mu_post_52, mu_post_53, mu_post_63)
 
-data.frame(
-  age = c("42", "52", "53", "63"),
+age_eff <- data.frame(
+  age = c("4[2]", "5[2]", "5[3]", "6[3]"),
   median = purrr::map(mu_age_list, median) %>% unlist(),
   low = purrr::map(mu_age_list, quantile, 0.05) %>% unlist(),
-  high = purrr::map(mu_age_list, quantile, 0.95) %>% unlist(),
-  parameter = "mu_age"
-) %>% 
-  ggplot(.) +
-  geom_pointrange(aes(x = age, y = median, fill = age, 
-                      ymin = low, ymax = high),
-                  shape = 21) +
-  facet_wrap(~parameter, scales = "free_y") +
+  high = purrr::map(mu_age_list, quantile, 0.95) %>% unlist()
+) 
+
+age_eff_dot <- ggplot(age_eff) +
+  geom_pointrange(aes(x = age, y = median, ymin = low, ymax = high, fill = age),
+                  shape = 21
+                  ) +
   ggsidekick::theme_sleek() +
-  labs(x = "Age Class", y = "Posterior Estimate") 
+  scale_x_discrete("Age Class", labels = parse(text = unique(age_eff$age))) +
+  labs(x = "Age Class", y = "Posterior Estimate Mean") +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none") 
+
   
 
 ## coefficient estimates for fixed effects for sex (assuming 42 and bilton)
@@ -302,20 +312,20 @@ mu_post_fem <- mu_post_gc
 mu_post_male <- draws[ , , "b_Intercept"] + draws[ , , "b_sexmale"]
 mu_sex_list <- list(mu_post_fem, mu_post_male)
 
-data.frame(
+sex_eff_dot <- data.frame(
   sex = c("female", "male"),
   median = purrr::map(mu_sex_list, median) %>% unlist(),
   low = purrr::map(mu_sex_list, quantile, 0.05) %>% unlist(),
-  high = purrr::map(mu_sex_list, quantile, 0.95) %>% unlist(),
-  parameter = "mu_sex"
+  high = purrr::map(mu_sex_list, quantile, 0.95) %>% unlist()
 ) %>% 
   ggplot(.) +
   geom_pointrange(aes(x = sex, y = median, fill = sex, 
                       ymin = low, ymax = high),
                   shape = 21) +
-  facet_wrap(~parameter, scales = "free_y") +
   ggsidekick::theme_sleek() +
-  labs(x = "Sex", y = "Posterior Estimate") 
+  labs(x = "Sex", y = "Posterior Estimate Mean") +
+  scale_fill_brewer(palette = 5, type = "seq") +
+  theme(legend.position = "none")
 
 
 ## as above for sigma
@@ -336,28 +346,29 @@ sigma_df <- data.frame(
   period = c("Gilbert-Clemens", "Bilton", "Monkley Dump", "Nisga'a"),
   median = purrr::map(sigma_list, median) %>% unlist(),
   low = purrr::map(sigma_list, quantile, 0.05) %>% unlist(),
-  high = purrr::map(sigma_list, quantile, 0.95) %>% unlist(),
-  parameter = "sigma"
+  high = purrr::map(sigma_list, quantile, 0.95) %>% unlist()
 ) 
 sigma_df$period = fct_relevel(as.factor(sigma_df$period),
                            "Gilbert-Clemens", "Bilton", "Monkley Dump",
                            "Nisga'a")
 
-
-period_est <- rbind(mu_df, sigma_df) %>% 
-  # mutate(period = fct_relevel(factor(period),
-  #                             "Gilbert-Clemens", "Bilton", "Nisga'a")) %>% 
-  ggplot(.) +
+area_sigma_dot <- ggplot(sigma_df) +
   geom_pointrange(aes(x = period, y = median, fill = period, 
                       ymin = low, ymax = high),
                   shape = 21) +
-  facet_wrap(~parameter, scales = "free_y") +
   ggsidekick::theme_sleek() +
-  labs(x = "Sampling Regime", y = "Posterior Estimate") 
+  # geom_text(aes(x = -Inf, y = Inf, label = "d)")) +
+  labs(x = "Sampling Period", y = "Posterior Estimate SD") +
+  theme(legend.position = "none")
 
-png(here::here("outputs", "figs", "period_est.png"), height = 4, width = 7.5,
+
+png(here::here("outputs", "figs", "main_effect.png"), 
+    height = 5, width = 8.5,
     units = "in", res = 250)
-period_est
+cowplot::plot_grid(area_eff_dot,
+                   age_eff_dot,
+                   sex_eff_dot,
+                   area_sigma_dot, ncol = 2)
 dev.off()
 
 
