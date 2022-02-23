@@ -22,6 +22,7 @@ dat <- dat_in %>%
     year_f = as.factor(year),
     sex = ifelse(sex == 1, "male", "female") %>% as.factor(),
     age = factor(as.character(age)),
+    age_f = age,
     date = as.POSIXct(paste(day, month, year, sep = "-"),
                       format = "%d-%m-%Y"),
     yday = lubridate::yday(date),
@@ -34,8 +35,6 @@ dat <- dat_in %>%
     !is.na(fl)
   )  %>%
   # Add a factor representing sample collection to visualize effects 
-  # NOTE: period is not modeled, we're simply assigning a color in the plot to 
-  # each data set
   mutate(
     period = case_when(
       year < 1947 ~ "Gilbert-Clemens",
@@ -53,6 +52,7 @@ dat <- dat_in %>%
     data_group = sample.int(5, nrow(.), replace = T)
   ) %>% 
   droplevels()
+levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
 # RAW DATA PLOTS ---------------------------------------------------------------
@@ -74,17 +74,17 @@ ggplot(dat2) +
 
 
 # box plots
-annual_box <- ggplot(dat2 %>% 
-                       filter(sex == "female")) +
-  geom_boxplot(aes(x = year_f, y = fl, fill = period)) +
-  facet_wrap(~age) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# annual_box <- ggplot(dat2 %>% 
+#                        filter(sex == "female")) +
+#   geom_boxplot(aes(x = year_f, y = fl, fill = period)) +
+#   facet_wrap(~age) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "Fork Length") +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
 mean_dat <- dat2 %>% 
-  group_by(year_f, age, period, sex) %>% 
+  group_by(year_f, age, age_f, period, sex) %>% 
   summarize(
     n = n(),
     mean_yday = mean(yday, na.rm = T),
@@ -102,7 +102,6 @@ mean_dat <- dat2 %>%
     overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
   droplevels() 
-levels(mean_dat$age) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
 annual_dot <- ggplot(
@@ -113,7 +112,7 @@ annual_dot <- ggplot(
 ) +
   geom_pointrange(aes(y = mean_fl, fill = period, ymin = lo, ymax = up),
                   shape = 21) +
-  facet_wrap(~age, labeller = label_parsed) +
+  facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
   scale_x_continuous(
@@ -212,7 +211,6 @@ brm1 <- brm_multiple(
 tictoc::toc()
 
 # saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
-brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
@@ -250,8 +248,11 @@ dev.off()
 
 ## POSTERIOR ESTIMATES ---------------------------------------------------------
 
+brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
+
 draws <- as_draws_array(brm1)
 sum_draws <- summarise_draws(draws, default_summary_measures())
+
 
 ## coefficient estimates for fixed effects for period  
 mu_post_bilton <- draws[ , ,"b_Intercept"] + draws[ , , "b_periodBilton"]
@@ -372,6 +373,8 @@ cowplot::plot_grid(area_eff_dot,
 dev.off()
 
 
+## ANNUAL TRENDS ---------------------------------------------------------------
+
 # first predictive dataset only has years observed in dataset; these are paired
 # with appropriate periods to estimate overall effects
 pred_dat <- expand.grid(
@@ -380,49 +383,66 @@ pred_dat <- expand.grid(
   yday_c = 0,
   sex = unique(dat$sex),
   period = "Gilbert-Clemens"
-) %>% 
- droplevels() 
+) %>%
+  left_join(., dat %>% select(age, age_f) %>% distinct(), by = "age") %>% 
+ droplevels()
 
-post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
-pred_dat_bayes <- pred_dat %>% 
-  mutate(
-    median = apply(post_pred, 2, median),
-    low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
-    up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
-  ) 
-
-smooth_pred1 <- ggplot(pred_dat_bayes, aes(x = year, y = median)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
-  facet_grid(sex~age) + 
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (cm)")
-
-png(here::here("outputs", "figs", "smooth_1period.png"), 
-    height = 4, width = 7.5, units = "in", res = 250)
-smooth_pred1
-dev.off()
+# post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
+# pred_dat_bayes <- pred_dat %>% 
+#   mutate(
+#     median = apply(post_pred, 2, median),
+#     low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
+#     up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
+#   ) 
+# 
+# smooth_pred1 <- ggplot(pred_dat_bayes, aes(x = year, y = median)) +
+#   geom_line() +
+#   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+#   facet_grid(sex~age) + 
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "Fork Length (cm)")
+# 
+# png(here::here("outputs", "figs", "smooth_1period.png"), 
+#     height = 4, width = 7.5, units = "in", res = 250)
+# smooth_pred1
+# dev.off()
 
 
 # as above but with fitted draws, not posterior predictions
-fit_year <- pred_dat %>% 
+fit_draws <- pred_dat %>% 
   add_fitted_draws(model = brm1, re_formula = NULL,
-                   allow_new_levels = TRUE) %>%
-  ggplot(., aes(x = year)) +
-  stat_lineribbon(aes(y = .value), 
-                  .width = c(.9, .5), alpha = 0.25) +
+                   allow_new_levels = TRUE) 
+fit_draws2 <- fit_draws %>% 
+  group_by(year, age, age_f, yday_c, sex, period) %>% 
+  summarize(
+    median = median(.value),
+    low = quantile(.value, probs = 0.05),
+    up = quantile(.value, probs = 0.95),
+    .groups = "drop"
+  ) 
+
+fit_pred <- ggplot(fit_draws2 %>% filter(sex == "female"), 
+                   aes(x = year, median)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
-  facet_grid(sex~age) 
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
+  
 
 png(here::here("outputs", "figs", "smooth_1period_fit.png"), 
-    height = 4, width = 7.5, units = "in", res = 250)
-fit_year
+    height = 4, width = 5, units = "in", res = 250)
+fit_pred
 dev.off()
 
 
 
-# second predictive dataset associates years with periods (approximate)
+# second predictive dataset associates years with periods (approximate) and 
+# includes residual variability
 pred_dat2 <- pred_dat %>% 
   mutate(
     period = case_when(
@@ -437,31 +457,38 @@ pred_dat2 <- pred_dat %>%
                          "Monkley Dump",
                          "Nisga'a")
   )
-mean_dat$year <- as.numeric(as.character(mean_dat$year_f))
-mean_dat$mean_fl_cm <- mean_dat$mean_fl / 10
 
 
-post_pred2 <- posterior_predict(brm1, pred_dat2, allow_new_levels = TRUE)
-post_ribbon2 <- pred_dat2 %>% 
+preds <- posterior_predict(brm1, pred_dat2, allow_new_levels = TRUE) 
+post_pred2 <- pred_dat2 %>% 
   mutate(
-    mean = apply(post_pred2, 2, mean),
-    low = apply(post_pred2, 2, function (x) quantile(x, probs = 0.05)),
-    up = apply(post_pred2, 2, function (x) quantile(x, probs = 0.95))
+    mean = apply(preds, 2, mean),
+    low = apply(preds, 2, function (x) quantile(x, probs = 0.05)),
+    up = apply(preds, 2, function (x) quantile(x, probs = 0.95))
   ) %>% 
-  ggplot(., aes(x = year, y = mean)) +
+  filter(sex == "female")
+post_ribbon2 <- ggplot(post_pred2, aes(x = year, y = mean)) +
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
-  facet_grid(sex~age) +
-  ggsidekick::theme_sleek() 
+  facet_wrap(~age_f, labeller = label_parsed) +
+  ggsidekick::theme_sleek() +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
 
 smooth_pred2 <- post_ribbon2 +
-  geom_point(data = mean_dat %>% filter(!is.na(period)), 
-             aes(x = year, y = mean_fl_cm, fill = period), 
+  geom_point(data = dat %>% 
+               filter(!is.na(period),
+                      sex == "female") %>% 
+               sample_n(1000), 
+             aes(x = year, y = fl_cm, fill = period), 
              shape = 21, alpha = 0.4) +
+  scale_fill_discrete(name = "Sampling\nPeriod") +
   labs(x = "Year", y = "Fork Length (cm)")
 
 png(here::here("outputs", "figs", "smooth_4periods.png"), 
-    height = 4, width = 7.5,
+    height = 4, width = 5.5,
     units = "in", res = 250)
 smooth_pred2
 dev.off()
@@ -472,34 +499,61 @@ pred_dat3 <- expand.grid(
   year = mean(dat$year),
   yday_c = seq(-46, 64, by = 0.1),
   age = unique(dat$age),
-  sex = "male",
+  sex = "female",
   period = "Gilbert-Clemens"
-) 
+) %>% 
+  mutate(
+    yday = yday_c + mean(dat$yday)
+  ) %>% 
+  left_join(., dat %>% select(age, age_f) %>% distinct(), by = "age") %>% 
+  droplevels()
 
-pp_yday <- pred_dat3 %>% 
-  add_predicted_draws(model = brm1, re_formula = NULL, 
-                      allow_new_levels = TRUE) %>% 
-  ggplot(., aes(x = yday_c)) +
-  stat_lineribbon(aes(y = .prediction), 
+pp_yday <- pred_dat3 %>%
+  add_predicted_draws(model = brm1, re_formula = NULL,
+                      allow_new_levels = TRUE) 
+
+pp_yday_plot <- ggplot(pp_yday, aes(x = yday_c)) +
+  stat_lineribbon(aes(y = .prediction),
                   .width = c(.9, .5), alpha = 0.25) +
   ggsidekick::theme_sleek() +
   labs(x = "Centered Year Day", y = "Fork Length (cm)") +
   facet_wrap(~age)
 
-fit_yday <- pred_dat3 %>% 
+pp_yday_plot +
+  geom_point(data = dat %>% 
+               filter(#period == "Gilbert-Clemens",
+                 sex == "female") %>% 
+               sample_n(1000), 
+             aes(x = yday_c, y = fl_cm, fill = period), 
+             shape = 21, alpha = 0.4)
+
+# png(here::here("outputs", "figs", "smooth_yday.png"), 
+#     height = 4.5, width = 4.5, units = "in", res = 250)
+# pp_yday
+# dev.off()
+
+
+fit_draws_day <- pred_dat3 %>% 
   add_fitted_draws(model = brm1, re_formula = NULL,
-                        allow_new_levels = TRUE) %>%
-  ggplot(., aes(x = yday_c)) +
-  stat_lineribbon(aes(y = .value), 
-                  .width = c(.9, .5), alpha = 0.25) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Centered Year Day", y = "Fork Length (cm)") +
-  facet_wrap(~age)
+                   allow_new_levels = TRUE)  %>% 
+  group_by(year, age, age_f, yday, yday_c, sex, period) %>% 
+  summarize(
+    median = median(.value),
+    low = quantile(.value, probs = 0.05),
+    up = quantile(.value, probs = 0.95),
+    .groups = "drop"
+  ) 
 
-png(here::here("outputs", "figs", "smooth_yday.png"), 
-    height = 4.5, width = 4.5, units = "in", res = 250)
-pp_yday
-dev.off()
+
+fit_yday <- ggplot(fit_draws_day, aes(x = yday, y = median)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year Day", y = "Fork Length (cm)") +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    expand = c(0.01, 0.01)
+  )
 
 png(here::here("outputs", "figs", "fit_smooth_yday.png"), 
     height = 4.5, width = 4.5, units = "in", res = 250)
