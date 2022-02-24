@@ -215,7 +215,7 @@ tictoc::toc()
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
 round(brm1$rhats, 3)
-conditional_effects(brm1, "year")
+conditional_effects(brm1)
 
 dat %>%
   droplevels() %>% 
@@ -556,7 +556,7 @@ fit_yday <- ggplot(fit_draws_day, aes(x = yday, y = median)) +
   )
 
 png(here::here("outputs", "figs", "fit_smooth_yday.png"), 
-    height = 4.5, width = 4.5, units = "in", res = 250)
+    height = 4, width = 5, units = "in", res = 250)
 fit_yday
 dev.off()
 
