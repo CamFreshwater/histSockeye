@@ -17,6 +17,8 @@ library(posterior)
 dat_in <- read.table(here::here("data", "nasscentury.txt"))
 colnames(dat_in) <- c("year", "month", "day", "hart_species", "sex", "age", 
                       "fl")
+
+set.seed(123)
 dat <- dat_in %>% 
   mutate(
     year_f = as.factor(year),
@@ -128,11 +130,11 @@ annual_dot <- ggplot(
 #   ggsidekick::theme_sleek() +
 #   labs(x = "Year", y = "SD Fork Length") +
 #   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-# ggplot(mean_dat, aes(x = year_f)) +
-#   geom_point(aes(y = mean_yday, fill = period), shape = 21) +
-#   facet_wrap(~age) +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
 # export
@@ -609,6 +611,156 @@ purrr::map2(age_list, age_names, function (x, y) {
   )
 }) %>% 
   bind_rows
+
+
+### Residuals ------------------------------------------------------------------
+
+resids <- resid(brm1)
+
+dum$resids <- resids[, "Estimate"]
+dum$cohort <- ifelse((dum$year %% 2) == 0, "even", "odd")
+
+pdf(here::here("outputs", "figs", "even_odd_resid.pdf"))
+ggplot(dum) +
+  geom_boxplot(aes(x = as.factor(year), y = resids, fill = cohort)) +
+  ggsidekick::theme_sleek() +
+  facet_grid(sex~age)
+ggplot(dum) +
+  geom_boxplot(aes(x = cohort, y = resids)) +
+  ggsidekick::theme_sleek() +
+  facet_grid(sex~age)
+dev.off()
+
+
+### Fecundity effects ----------------------------------------------------------
+
+## Mason and West regression 
+b1 = 11.52 #11.10 (other river) 
+a1 = -2152 #2015.8 (other river)
+
+pred_dat5 <- pred_dat %>% filter(sex == "female")
+
+post_fem <- posterior_predict(
+  brm1, 
+  pred_dat5,
+  allow_new_levels = TRUE
+) 
+  
+# calculate fecundity; includes conversion to mm and POH
+post_fec <- ((b1 * (post_fem * 10 * 0.84)) + a1) / 1000
+
+age53 <- post_fec[ , which(pred_dat5$age == "53")]
+age52 <- post_fec[ , which(pred_dat5$age == "52")]
+age42 <- post_fec[ , which(pred_dat5$age == "42")]
+age63 <- post_fec[ , which(pred_dat5$age == "63")]
+age_list <- list(age53, age52, age42, age63)
+age_names <- c("53", "52", "42", "63")
+
+
+# differences in fecundity through time
+purrr::map2(age_list, age_names, function (x, y) {
+  #calc time series mean for each iteration
+  mu <- apply(x, 1, mean)
+  #difference from mean
+  diff <- x[ , ncol(x)] - mu
+  #difference from first obs
+  diff2 <- x[ , ncol(x)] - x[ , 1]
+  rel_dif <- diff2 / mu
+  data.frame(
+    mean_diff_mean = mean(diff),
+    mean_rel_diff = mean(rel_dif),
+    mean_diff_start = mean(diff2),
+    low = quantile(diff2, probs = 0.05),
+    high = quantile(diff2, probs = 0.95),
+    age = y
+  )
+}) %>% 
+  bind_rows
+
+
+pred_dat5 %>% 
+  mutate(
+    median = apply(post_fec, 2, median),
+    low = apply(post_fec, 2, function (x) quantile(x, probs = 0.05)),
+    up = apply(post_fec, 2, function (x) quantile(x, probs = 0.95))
+  ) %>% 
+  ggplot(., aes(x = year, y = median)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fecundity (1000s eggs)") +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    expand = c(0.01, 0.01)
+  )
+
+
+# as above but excluding residual variation
+fit_fem <- pred_dat5 %>% 
+  add_fitted_draws(model = brm1, re_formula = NULL, allow_new_levels = TRUE)
+
+tt <- fit_fem %>% 
+  mutate(egg_count = ((b1 * (.value * 10 * 0.84)) + a1) / 1000) %>% 
+  group_by(age) %>% 
+  mutate(mean_egg_count = mean(egg_count)) %>% 
+  filter(year == max(pred_dat5$year) | year == min(pred_dat5$year),
+         period == "Gilbert-Clemens") %>%
+  ungroup() %>% 
+  select(-c(.chain, .iteration, .row, .value)) %>%
+  pivot_wider(names_from = "year", values_from = "egg_count") %>% 
+  mutate(diff = `2019` - `1914`,
+         rel_diff = diff / mean_egg_count) 
+
+
+diff_fecundity <- tt %>% 
+  group_by(age_f, sex) %>% 
+  summarize(
+    median = median(diff),
+    low = quantile(diff, probs = 0.05),
+    up = quantile(diff, probs = 0.95),
+    rel_median = median(rel_diff),
+    rel_low = quantile(rel_diff, probs = 0.05),
+    rel_up = quantile(rel_diff, probs = 0.95),
+    .groups = "drop"
+  )
+
+
+png(here::here("outputs", "figs", "fecundity_diff.png"), 
+    height = 4, width = 5, units = "in", res = 250)
+ggplot(diff_fecundity) +
+  geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, ymax = rel_up)) +
+  geom_hline(aes(yintercept = 0), lty = 2) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Age", y = "Relative Difference in Relative Fecundity (2019-1914)") +
+  # scale_fill_brewer(palette = 6, type = "seq") +
+  theme(legend.position = "none")
+dev.off()
+
+
+
+fit_fem %>% 
+  mutate(egg_count = ((b1 * (.value * 10 * 0.84)) + a1) / 1000) %>% 
+  group_by(year, age, age_f) %>% 
+  summarize(
+    median = median(egg_count),
+    low = quantile(egg_count, probs = 0.05),
+    up = quantile(egg_count, probs = 0.95),
+    .groups = "drop"
+  )  %>% 
+  ggplot(., aes(x = year, y = median)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fecundity (1000s eggs)") +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    expand = c(0.01, 0.01)
+  )
+
+
+
+# calculate change in proportions, multiplied by mean size
+
 
 
 ### MGCV COMPARE ---------------------------------------------------------------
