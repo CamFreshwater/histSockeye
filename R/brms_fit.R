@@ -423,6 +423,10 @@ fit_draws2 <- fit_draws %>%
     .groups = "drop"
   ) 
 
+fit_draws2 %>% 
+  filter(sex == "female",
+         year %in% c("1914", "2019")) %>% arrange(age)
+
 fit_pred <- ggplot(fit_draws2 %>% filter(sex == "female"), 
                    aes(x = year, median)) +
   geom_line() +
