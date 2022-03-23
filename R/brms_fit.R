@@ -726,6 +726,13 @@ diff_fecundity <- tt %>%
     rel_low = quantile(rel_diff, probs = 0.05),
     rel_up = quantile(rel_diff, probs = 0.95),
     .groups = "drop"
+  ) %>% 
+  mutate(
+    age_f = factor(
+      age_f, 
+      labels = c(expression("4"["2"]), expression("5"["2"]), 
+                 expression("5"["3"]), expression("6"["3"]))
+    )
   )
 
 
@@ -735,8 +742,12 @@ ggplot(diff_fecundity) +
   geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, ymax = rel_up)) +
   geom_hline(aes(yintercept = 0), lty = 2) +
   ggsidekick::theme_sleek() +
-  labs(x = "Age", y = "Relative Difference in Relative Fecundity (2019-1914)") +
-  # scale_fill_brewer(palette = 6, type = "seq") +
+  labs(y = "Relative Difference in Relative Fecundity (2019-1914)") +
+  scale_x_discrete(
+    "Age",
+    labels = c(expression("4"["2"]), expression("5"["2"]), 
+               expression("5"["3"]), expression("6"["3"]))
+    ) +
   theme(legend.position = "none")
 dev.off()
 
