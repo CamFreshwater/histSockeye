@@ -76,13 +76,19 @@ ggplot(dat2) +
 
 
 # box plots
-# annual_box <- ggplot(dat2 %>% 
+# annual_box <- ggplot(dat2 %>%
 #                        filter(sex == "female")) +
 #   geom_boxplot(aes(x = year_f, y = fl, fill = period)) +
 #   facet_wrap(~age) +
 #   ggsidekick::theme_sleek() +
 #   labs(x = "Year", y = "Fork Length") +
 #   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# 
+# ggplot(dat2) +
+#   geom_boxplot(aes(x = sex, y = fl)) +
+#   facet_grid(period~age, scales = "free_x") +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "Fork Length") 
 
 
 mean_dat <- dat2 %>% 
@@ -136,6 +142,11 @@ ggplot(mean_dat, aes(x = year_f)) +
   ggsidekick::theme_sleek() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = sd_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 # export
 png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
@@ -446,7 +457,6 @@ fit_pred
 dev.off()
 
 
-
 # second predictive dataset associates years with periods (approximate) and 
 # includes residual variability
 pred_dat2 <- pred_dat %>% 
@@ -514,24 +524,24 @@ pred_dat3 <- expand.grid(
   left_join(., dat %>% select(age, age_f) %>% distinct(), by = "age") %>% 
   droplevels()
 
-pp_yday <- pred_dat3 %>%
-  add_predicted_draws(model = brm1, re_formula = NULL,
-                      allow_new_levels = TRUE) 
-
-pp_yday_plot <- ggplot(pp_yday, aes(x = yday_c)) +
-  stat_lineribbon(aes(y = .prediction),
-                  .width = c(.9, .5), alpha = 0.25) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Centered Year Day", y = "Fork Length (cm)") +
-  facet_wrap(~age)
-
-pp_yday_plot +
-  geom_point(data = dat %>% 
-               filter(#period == "Gilbert-Clemens",
-                 sex == "female") %>% 
-               sample_n(1000), 
-             aes(x = yday_c, y = fl_cm, fill = period), 
-             shape = 21, alpha = 0.4)
+# pp_yday <- pred_dat3 %>%
+#   add_predicted_draws(model = brm1, re_formula = NULL,
+#                       allow_new_levels = TRUE) 
+# 
+# pp_yday_plot <- ggplot(pp_yday, aes(x = yday_c)) +
+#   stat_lineribbon(aes(y = .prediction),
+#                   .width = c(.9, .5), alpha = 0.25) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Centered Year Day", y = "Fork Length (cm)") +
+#   facet_wrap(~age)
+# 
+# pp_yday_plot +
+#   geom_point(data = dat %>% 
+#                filter(#period == "Gilbert-Clemens",
+#                  sex == "female") %>% 
+#                sample_n(1000), 
+#              aes(x = yday_c, y = fl_cm, fill = period), 
+#              shape = 21, alpha = 0.4)
 
 # png(here::here("outputs", "figs", "smooth_yday.png"), 
 #     height = 4.5, width = 4.5, units = "in", res = 250)
@@ -550,15 +560,16 @@ fit_draws_day <- pred_dat3 %>%
     .groups = "drop"
   ) 
 
-
 fit_yday <- ggplot(fit_draws_day, aes(x = yday, y = median)) +
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year Day", y = "Fork Length (cm)") +
+  labs(x = "Sampling Date", y = "Fork Length (cm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
-    expand = c(0.01, 0.01)
+    breaks = c(166, 213, 257),
+    expand = c(0.01, 0.01),
+    labels = c("Jun 15", "Aug 1", "Sep 15")
   )
 
 png(here::here("outputs", "figs", "fit_smooth_yday.png"), 
@@ -742,7 +753,7 @@ ggplot(diff_fecundity) +
   geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, ymax = rel_up)) +
   geom_hline(aes(yintercept = 0), lty = 2) +
   ggsidekick::theme_sleek() +
-  labs(y = "Relative Difference in Relative Fecundity (2019-1914)") +
+  labs(y = "Difference in Relative Fecundity (2019-1914)") +
   scale_x_discrete(
     "Age",
     labels = c(expression("4"["2"]), expression("5"["2"]), 
