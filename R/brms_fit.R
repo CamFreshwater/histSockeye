@@ -127,6 +127,7 @@ annual_dot <- ggplot(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   ) +
+  geom_vline(xintercept = 1966, col = "red", lty = 2) +
   geom_hline(aes(yintercept = overall_mean), lty = 2) +
   scale_fill_discrete(name = "Sampling\nPeriod")
 
@@ -397,8 +398,8 @@ pred_dat <- expand.grid(
   sex = unique(dat$sex),
   period = "Gilbert-Clemens"
 ) %>%
-  left_join(., dat %>% select(age, age_f) %>% distinct(), by = "age") %>% 
- droplevels()
+  left_join(., dat %>% dplyr::select(age, age_f) %>% distinct(), by = "age") %>% 
+  droplevels()
 
 # post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
 # pred_dat_bayes <- pred_dat %>% 
@@ -434,14 +435,11 @@ fit_draws2 <- fit_draws %>%
     .groups = "drop"
   ) 
 
-fit_draws2 %>% 
-  filter(sex == "female",
-         year %in% c("1914", "2019")) %>% arrange(age)
-
 fit_pred <- ggplot(fit_draws2 %>% filter(sex == "female"), 
                    aes(x = year, median)) +
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  geom_vline(xintercept = 1966, col = "red", lty = 2) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
@@ -462,7 +460,7 @@ dev.off()
 pred_dat2 <- pred_dat %>% 
   mutate(
     period = case_when(
-      year < 1947 ~ "Gilbert-Clemens",
+      year < 1952 ~ "Gilbert-Clemens",
       year > 1972 & year < 1994 ~ "Monkley Dump",
       year > 1993 ~ "Nisga'a",
       TRUE ~ "Bilton"
@@ -485,6 +483,7 @@ post_pred2 <- pred_dat2 %>%
   filter(sex == "female")
 post_ribbon2 <- ggplot(post_pred2, aes(x = year, y = mean)) +
   geom_line() +
+  geom_vline(xintercept = 1966, col = "red", lty = 2) +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
@@ -507,6 +506,26 @@ png(here::here("outputs", "figs", "smooth_4periods.png"),
     height = 4, width = 5.5,
     units = "in", res = 250)
 smooth_pred2
+dev.off()
+
+
+#duplicate posterior predictions plot with out of sample means from Foskett
+fosk_dat <- read.csv(here::here("data", "foskett_mean_size.csv"),
+                     fileEncoding = 'UTF-8-BOM') %>% 
+  janitor::clean_names() %>%
+  mutate(mean_fl = len_mm / 10,
+         age = as.character(age)) %>% 
+  left_join(., dat %>% dplyr::select(age, age_f) %>% distinct(), by = "age") 
+  
+
+png(here::here("outputs", "figs", "smooth_4periods_foskett.png"), 
+    height = 4, width = 5.5,
+    units = "in", res = 250)
+smooth_pred2 +
+  geom_point(data = fosk_dat %>% filter(sex == "F"), 
+             aes(x = year, y = mean_fl), fill = "red", shape = 21) +
+  scale_fill_discrete(name = "Sampling\nPeriod") +
+  labs(x = "Year", y = "Fork Length (cm)")
 dev.off()
 
 
@@ -636,10 +655,6 @@ dum$resids <- resids[, "Estimate"]
 dum$cohort <- ifelse((dum$year %% 2) == 0, "even", "odd")
 
 pdf(here::here("outputs", "figs", "even_odd_resid.pdf"))
-ggplot(dum) +
-  geom_boxplot(aes(x = as.factor(year), y = resids, fill = cohort)) +
-  ggsidekick::theme_sleek() +
-  facet_grid(sex~age)
 ggplot(dum) +
   geom_boxplot(aes(x = cohort, y = resids)) +
   ggsidekick::theme_sleek() +
@@ -782,11 +797,6 @@ fit_fem %>%
   scale_x_continuous(
     expand = c(0.01, 0.01)
   )
-
-
-
-# calculate change in proportions, multiplied by mean size
-
 
 
 ### MGCV COMPARE ---------------------------------------------------------------
