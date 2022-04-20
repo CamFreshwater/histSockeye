@@ -4,6 +4,7 @@
 # 2) Estimate temporal trend using GAM and brms to account for changes in
 # variability with sampling regime
 # Created by C Freshwater Dec 23, 2021
+# Update w/ edited data
 # -------------------------------------------------
 
 
@@ -14,7 +15,9 @@ library(posterior)
 
 
 # import nass data
-dat_in <- read.table(here::here("data", "nasscentury.txt"))
+# dat_old <- read.table(here::here("data", "nasscentury.txt"))
+dat_in <- read.table(here::here("data", "nasscenturyv2.txt"))
+dat_avg <- read.table(here::here("data", "nasscenturyavgv2FLAT.txt"))
 colnames(dat_in) <- c("year", "month", "day", "hart_species", "sex", "age", 
                       "fl")
 
@@ -39,7 +42,7 @@ dat <- dat_in %>%
   # Add a factor representing sample collection to visualize effects 
   mutate(
     period = case_when(
-      year < 1947 ~ "Gilbert-Clemens",
+      year < 1957 ~ "Gilbert-Clemens",
       year > 1972 & year < 1994 ~ "Monkley Dump",
       year > 1993 ~ "Nisga'a",
       TRUE ~ "Bilton"
@@ -110,7 +113,8 @@ mean_dat <- dat2 %>%
     overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
   droplevels() 
-
+write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
+          row.names = FALSE)
 
 annual_dot <- ggplot(
   mean_dat %>% 
@@ -460,7 +464,7 @@ dev.off()
 pred_dat2 <- pred_dat %>% 
   mutate(
     period = case_when(
-      year < 1952 ~ "Gilbert-Clemens",
+      year < 1957 ~ "Gilbert-Clemens",
       year > 1972 & year < 1994 ~ "Monkley Dump",
       year > 1993 ~ "Nisga'a",
       TRUE ~ "Bilton"
