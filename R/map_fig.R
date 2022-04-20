@@ -13,18 +13,24 @@ library(ggplot2)
 # ocean shapefile
 # coast_raw <- st_read(here::here("data", "spatial", "shapefiles", "ne_10m_ocean.shp"))
 # # primary rivers shapefile
-# rivers_raw <- st_read(here::here("data", "spatial", "shapefiles", 
+# rivers_raw <- st_read(here::here("data", "spatial", "shapefiles",
 #                                  "ne_10m_rivers_lake_centerlines.shp"))
 # # secondary rivers shapefile
-# rivers2_raw <- st_read(here::here("data", "spatial", "shapefiles", 
+# rivers2_raw <- st_read(here::here("data", "spatial", "shapefiles",
 #                                   "ne_10m_rivers_north_america.shp"))
-
-# bounding box
+# # secondary rivers shapefile
+lakes_raw <- st_read(here::here("data", "spatial", "shapefiles",
+                                "british_columbia_water.shp"))
+lakes_nass <- lakes_raw %>%
+  #subset to lakes of interest
+  filter(grepl("Meziadin", NAME) | grepl("Bowser", NAME))
+# 
+# # bounding box
 # min_lon <- -133.25
 # min_lat <- 51.5
 # max_lon <- -123
 # max_lat <- 57
-
+# 
 # coast <- coast_raw %>%
 #   #apply buffer to fix small errors in dataset
 #   st_buffer(., 0) %>%
@@ -40,20 +46,22 @@ library(ggplot2)
 #   #convert to UTM to add buffer
 #   st_transform(., crs = sp::CRS("+proj=utm +zone=10 +units=m"))
 # 
+# 
+# 
 # # save cropped versions
 # saveRDS(coast, here::here("data", "spatial", "trim_coast_sf.rds"))
 # saveRDS(rivers1, here::here("data", "spatial", "trim_rivers1_sf.rds"))
 # saveRDS(rivers2, here::here("data", "spatial", "trim_rivers2_sf.rds"))
-
+# saveRDS(lakes_nass, here::here("data", "spatial", "lakes_nass_sf.rds"))
 
 coast <- readRDS(here::here("data", "spatial", "trim_coast_sf.rds"))
 rivers1 <- readRDS(here::here("data", "spatial", "trim_rivers1_sf.rds"))
 rivers2 <- readRDS(here::here("data", "spatial", "trim_rivers2_sf.rds"))
-
+lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds"))
 
 # combine primary and secondary rivers, dropping unshared columns (2 has extras)
 rivers <- rbind(rivers1, rivers2[names(rivers1)]) 
-rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving"))
+rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin"))
 
 # set attribute-geometry relationship to constant to avoid errors when cropping
 st_agr(rivers) = "constant"
@@ -78,11 +86,15 @@ min_lat <- 53
 max_lon <- -126
 max_lat <- 57
 
+ggplot() +
+  geom_sf(data = lakes_raw, color = "black", fill = "white")
 
 # main map
 main <- ggplot() +
   geom_sf(data = coast, color = "black", fill = "white") +
-  geom_sf(data = rivers_sub, color = "black", fill = "black", size = 1) +
+  geom_sf(data = rivers_sub, color = "black", fill = "black"#, size = 1
+          ) +
+  geom_sf(data = lakes_nass, color = "black", fill = "black") +
   ggsidekick::theme_sleek() +
   theme(panel.background = element_rect(fill = "darkgrey")) +
   #removes extra border
