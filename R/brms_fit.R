@@ -17,16 +17,17 @@ library(posterior)
 # import nass data
 # dat_old <- read.table(here::here("data", "nasscentury.txt"))
 dat_in <- read.table(here::here("data", "nasscenturyv2.txt"))
-dat_avg <- read.table(here::here("data", "nasscenturyavgv2FLAT.txt"))
 colnames(dat_in) <- c("year", "month", "day", "hart_species", "sex", "age", 
                       "fl")
+# empty_yrs <- dat_n %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
+
 
 set.seed(123)
-dat <- dat_in %>% 
+dat <- dat_in %>%
   mutate(
-    year_f = as.factor(year),
     sex = ifelse(sex == 1, "male", "female") %>% as.factor(),
     age = factor(as.character(age)),
+    year_f = as.factor(year),
     age_f = age,
     date = as.POSIXct(paste(day, month, year, sep = "-"),
                       format = "%d-%m-%Y"),
@@ -107,23 +108,69 @@ mean_dat <- dat2 %>%
     lo = mean_fl - (1.96 * se_fl),
     .groups = "drop"
   ) %>% 
-  distinct() %>% 
-  group_by(age, sex) %>% 
+  distinct() 
+empty_yrs <- mean_dat %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
+
+write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
+          row.names = FALSE)
+
+
+# add in averages for years that are missing individual samples
+dat_avg <- read.table(here::here("data", "nasscenturyavgv2FLAT.txt"),
+                      header = TRUE) %>%
+  pivot_longer(cols = -(iy.)) %>%
+  mutate(
+    year_f = as.factor(iy.),
+    sex = ifelse(grepl("m", name), "male", "female") %>% as.factor,
+    age = case_when(
+      grepl("42", name) ~ "42",
+      grepl("52", name) ~ "52",
+      grepl("53", name) ~ "53",
+      grepl("63", name) ~ "63"
+    ) %>%
+      as.factor(),
+    period = case_when(
+      iy. < 1957 ~ "Gilbert-Clemens",
+      iy. > 1972 & iy. < 1994 ~ "Monkley Dump",
+      iy. > 1993 ~ "Nisga'a",
+      TRUE ~ "Bilton"
+    ),
+    age_f = age,
+    period = fct_relevel(as.factor(period),
+                         "Gilbert-Clemens",
+                         "Bilton",
+                         "Monkley Dump",
+                         "Nisga'a"),
+    lo = NaN,
+    up = NaN,
+    data = "annual average"
+  ) %>%
+  filter(year_f %in% empty_yrs,
+         sex == "female") %>% 
+  select(year_f, mean_fl = value, period, lo, up, age_f, data)
+levels(dat_avg$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+
+mean_dat_plotting <- mean_dat %>% 
+  mutate(data = "individual measurements") %>% 
+  filter(sex == "female",
+         !is.na(period)) %>% 
+  select(year_f, mean_fl, period, lo, up, age_f, data) %>%
+  rbind(., dat_avg) %>% 
+  group_by(age_f) %>% 
   mutate(
     overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
   droplevels() 
-write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
-          row.names = FALSE)
+
+shape_pal <- c(23, 21)
+names(shape_pal) <- c("annual average", "individual measurements")
 
 annual_dot <- ggplot(
-  mean_dat %>% 
-    filter(sex == "female",
-           !is.na(period)), 
+  mean_dat_plotting, 
   aes(x = as.numeric(as.character(year_f)))
 ) +
-  geom_pointrange(aes(y = mean_fl, fill = period, ymin = lo, ymax = up),
-                  shape = 21) +
+  geom_pointrange(aes(y = mean_fl, fill = period, ymin = lo, ymax = up, 
+                      shape = data)) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
@@ -133,7 +180,10 @@ annual_dot <- ggplot(
   ) +
   geom_vline(xintercept = 1966, col = "red", lty = 2) +
   geom_hline(aes(yintercept = overall_mean), lty = 2) +
-  scale_fill_discrete(name = "Sampling\nPeriod")
+  scale_fill_discrete(name = "Sampling\nPeriod") +
+  scale_shape_manual(values = shape_pal, name = "Dataset") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+
 
 # annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
 #   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
