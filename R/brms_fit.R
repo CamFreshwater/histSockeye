@@ -16,7 +16,7 @@ library(posterior)
 
 # import nass data
 # dat_old <- read.table(here::here("data", "nasscentury.txt"))
-dat_in <- read.table(here::here("data", "nasscenturyv2.txt"))
+dat_in <- read.table(here::here("data", "nasscenturyv3.txt"))
 colnames(dat_in) <- c("year", "month", "day", "hart_species", "sex", "age", 
                       "fl")
 # empty_yrs <- dat_n %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
@@ -71,12 +71,12 @@ dat2 <- expand.grid(
 ) %>% 
   left_join(., dat, by = c("year_f", "age", "sex")) 
 
-ggplot(dat2) +
-  geom_point(aes(x = year_f, y = yday_c, fill = period)) +
-  # facet_wrap(~age) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# ggplot(dat2) +
+#   geom_point(aes(x = year_f, y = yday_c, fill = period)) +
+#   # facet_wrap(~age) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "Fork Length") +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 
 # box plots
@@ -116,7 +116,7 @@ write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
 
 
 # add in averages for years that are missing individual samples
-dat_avg <- read.table(here::here("data", "nasscenturyavgv2FLAT.txt"),
+dat_avg <- read.table(here::here("data", "nasscenturyavgv3FLAT.txt"),
                       header = TRUE) %>%
   pivot_longer(cols = -(iy.)) %>%
   mutate(
