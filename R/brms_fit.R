@@ -71,30 +71,6 @@ dat2 <- expand.grid(
 ) %>% 
   left_join(., dat, by = c("year_f", "age", "sex")) 
 
-# ggplot(dat2) +
-#   geom_point(aes(x = year_f, y = yday_c, fill = period)) +
-#   # facet_wrap(~age) +
-#   ggsidekick::theme_sleek() +
-#   labs(x = "Year", y = "Fork Length") +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-
-# box plots
-# annual_box <- ggplot(dat2 %>%
-#                        filter(sex == "female")) +
-#   geom_boxplot(aes(x = year_f, y = fl, fill = period)) +
-#   facet_wrap(~age) +
-#   ggsidekick::theme_sleek() +
-#   labs(x = "Year", y = "Fork Length") +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-# 
-# ggplot(dat2) +
-#   geom_boxplot(aes(x = sex, y = fl)) +
-#   facet_grid(period~age, scales = "free_x") +
-#   ggsidekick::theme_sleek() +
-#   labs(x = "Year", y = "Fork Length") 
-
-
 mean_dat <- dat2 %>% 
   group_by(year_f, age, age_f, period, sex) %>% 
   summarize(
@@ -285,13 +261,16 @@ bayesplot::mcmc_trace(post)
 round(brm1$rhats, 3)
 conditional_effects(brm1)
 
-dat %>%
+resids <- dat %>%
   droplevels() %>% 
   add_residual_draws(brm1) %>%
-  median_qi() %>%
-  ggplot(aes(sample = .residual)) +
+  median_qi() %>% 
+  ggplot( aes(sample = .residual)) +
   geom_qq() +
   geom_qq_line()
+
+# time series of residuals
+
 
 # posterior predictive checks 
 pp_check(brm1)
