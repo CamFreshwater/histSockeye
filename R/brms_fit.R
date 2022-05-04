@@ -7,7 +7,7 @@
 # Update w/ edited data
 # -------------------------------------------------
 
-
+library(dbplyr)
 library(tidyverse)
 library(brms)
 library(tidybayes)
@@ -263,13 +263,25 @@ conditional_effects(brm1)
 
 resids <- dat %>%
   droplevels() %>% 
-  add_residual_draws(brm1) %>%
-  median_qi() %>% 
-  ggplot( aes(sample = .residual)) +
-  geom_qq() +
-  geom_qq_line()
+  add_residual_draws(brm1) 
 
 # time series of residuals
+mean_resids <- resids %>% 
+  group_by(year, month, day, sex, age, fl, year_f, age_f, yday, period, .row) %>% 
+  summarize(mean_resid = mean(.residual))
+
+resid_point <- mean_resids %>% 
+  ungroup() %>% 
+  sample_n(size = 30000, replace = FALSE) %>%
+  ggplot(.) +
+  geom_point(aes(x = year_f, y = mean_resid, fill = period), 
+             alpha = 0.4, shape = 21) +
+  facet_grid(age_f ~ sex) +
+  ggsidekick::theme_sleek()
+
+pdf(here::here("outputs", "figs", "resids_50k_samps.pdf"))
+resid_point
+dev.off()
 
 
 # posterior predictive checks 
