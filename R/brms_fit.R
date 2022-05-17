@@ -215,15 +215,8 @@ brms::get_prior(bf(
 ),
 data = dat)
 
-# library(future)
-# plan(multiprocess)
-
 split_dat <- split(dat, dat$data_group)
 
-
-# trim_dat <- dat %>%
-#   sample_n(size = 20000) %>% 
-#   split(., .$data_group)
 
 
 tictoc::tic()
@@ -235,7 +228,7 @@ brm1 <- brm_multiple(
     sigma ~ period
   ),
   data = split_dat, seed = 17,
-  iter = 2250, thin = 10, chains = 3, warmup = 750, #refresh = 0,  
+  iter = 2000, thin = 10, chains = 3, warmup = 750, #refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
                  ),
   prior=c(prior(normal(60, 15), class="Intercept"),
@@ -254,7 +247,7 @@ brm1 <- brm_multiple(
 )
 tictoc::toc()
 
-# saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
+saveRDS(brm1, here::here("outputs", "data", "brms_fits", "ind_ls_v3.rds"))
 
 post <- as.array(brm1)
 bayesplot::mcmc_trace(post)
