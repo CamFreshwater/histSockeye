@@ -7,7 +7,6 @@
 # Update w/ edited data
 # -------------------------------------------------
 
-library(dbplyr)
 library(tidyverse)
 library(brms)
 library(tidybayes)
@@ -55,7 +54,7 @@ dat <- dat_in %>%
                          "Nisga'a"),
     fl_cm = fl / 10,
     # add random identifier to split datasets for subsetting,
-    data_group = sample.int(5, nrow(.), replace = T)
+    data_group = sample.int(8, nrow(.), replace = T)
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
@@ -87,8 +86,8 @@ mean_dat <- dat2 %>%
   distinct() 
 empty_yrs <- mean_dat %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
 
-write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
-          row.names = FALSE)
+# write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
+#           row.names = FALSE)
 
 
 # add in averages for years that are missing individual samples
@@ -134,11 +133,14 @@ mean_dat_plotting <- mean_dat %>%
   rbind(., dat_avg) %>% 
   group_by(age_f) %>% 
   mutate(
+    mean_fl = mean_fl / 10,
+    lo = lo / 10,
+    up = up / 10,
     overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
   droplevels() 
 
-shape_pal <- c(23, 21)
+shape_pal <- c(22, 21)
 names(shape_pal) <- c("annual average", "individual measurements")
 
 annual_dot <- ggplot(
@@ -154,7 +156,7 @@ annual_dot <- ggplot(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   ) +
-  geom_vline(xintercept = 1966, col = "red", lty = 2) +
+  # geom_vline(xintercept = 1966, col = "red", lty = 2) +
   geom_hline(aes(yintercept = overall_mean), lty = 2) +
   scale_fill_discrete(name = "Sampling\nPeriod") +
   scale_shape_manual(values = shape_pal, name = "Dataset") +
@@ -215,8 +217,8 @@ brms::get_prior(bf(
 ),
 data = dat)
 
-split_dat <- split(dat, dat$data_group)
 
+split_dat <- split(dat, dat$data_group)
 
 
 tictoc::tic()
@@ -228,7 +230,7 @@ brm1 <- brm_multiple(
     sigma ~ period
   ),
   data = split_dat, seed = 17,
-  iter = 2000, thin = 10, chains = 3, warmup = 750, #refresh = 0,  
+  iter = 1800, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
                  ),
   prior=c(prior(normal(60, 15), class="Intercept"),
@@ -239,9 +241,9 @@ brm1 <- brm_multiple(
           prior(normal(0, 10), class="b", coef = "periodBilton"),
           prior(normal(0, 10), class="b", coef = "periodMonkleyDump"),
           prior(normal(0, 10), class="b", coef = "periodNisgaa"),
-          prior(normal(0, 30), class="b", coef = "syear_1"),
-          prior(normal(0, 30), class="b", coef = "syday_c_1"),
-          prior(normal(0, 10), class="b", dpar = "sigma"),
+          prior(normal(0, 5), class="b", coef = "syear_1"),
+          prior(normal(0, 5), class="b", coef = "syday_c_1"),
+          prior(normal(0, 2.5), class="b", dpar = "sigma"),
           prior(exponential(0.5), class = "Intercept", dpar = "sigma")
   )
 )
@@ -461,8 +463,7 @@ pred_dat <- expand.grid(
 
 
 # as above but with fitted draws, not posterior predictions
-fit_draws <- pred_dat %>% 
-  add_fitted_draws(model = brm1, re_formula = NULL,
+fit_draws <- add_epred_draws(pred_dat, brm1, re_formula = NULL,
                    allow_new_levels = TRUE) 
 fit_draws2 <- fit_draws %>% 
   group_by(year, age, age_f, yday_c, sex, period) %>% 
@@ -472,6 +473,9 @@ fit_draws2 <- fit_draws %>%
     up = quantile(.value, probs = 0.95),
     .groups = "drop"
   ) 
+# saveRDS(fit_draws2,
+#         here::here("outputs", "data", "brms_fits", "brms_post_preds.rds"))
+
 
 fit_pred <- ggplot(fit_draws2 %>% filter(sex == "female"), 
                    aes(x = year, median)) +
@@ -843,10 +847,10 @@ library(mgcv)
 library(gratia)
 
 gam1 <- gam(
-  fl_cm ~ s(yday_c, k = 3, by = age) + s(year, m = 2, k = 5) + 
-    s(year, by = age, m = 1, k = 5) +
+  fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) + 
+    s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
     age + sex + period, 
-  data = dat,
+  data = dat %>% sample_n(., 10000),
   method = "REML"
 )
 gam2 <- gam(
