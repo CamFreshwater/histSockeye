@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------
 
 library(tidyverse)
-library(corrplot)
+library(ggcorrplot)
 
 
 # posterior predictions from brms_fit
@@ -69,20 +69,8 @@ levels(dat_avg2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 # CORRELATION MATRICES ---------------------------------------------------------
 
 # example with just return year and observed correlations
-dum <- dat_avg2 %>% 
-  filter(sex == "male") %>% 
-  pivot_wider(c(brood_year, age_f, obs_mean), names_from = age_f, 
-              values_from = obs_mean) %>%
-  drop_na() %>% 
-  select(-brood_year) %>% 
-  cor(.) %>% 
-  glimpse()
-
-ggcorrplot(dum, hc.order = TRUE, type = "lower",
-           lab = TRUE)
-
-
-corr_foo <- function(data, sex_in = "male", year_class, data_class) {
+corr_foo <- function(data, sex_in = "male", year_class, data_class,
+                     title) {
   dum <- data %>% 
     filter(sex == sex_in) %>% 
     pivot_wider(c({{ year_class }}, age_f, {{ data_class }}), 
@@ -93,13 +81,17 @@ corr_foo <- function(data, sex_in = "male", year_class, data_class) {
     cor(.) 
   
   ggcorrplot(dum, hc.order = TRUE, type = "lower",
-             lab = TRUE)
+             lab = TRUE, title = title) 
 }
 
-corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean)
-corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean)
-corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean)
-corr_foo(dat_avg2, year_class = entry_year, data_class = obs_mean)
+pdf(here::here("outputs", "figs", "cor_plot.pdf"))
+corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean,
+         title = "Return Year")
+corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean,
+         title = "Brood Year")
+corr_foo(dat_avg2, year_class = entry_year, data_class = obs_mean,
+         title = "Entry Year")
+dev.off()
 
 corr_foo(dat_avg2, year_class = ret_year, data_class = median_est)
 corr_foo(dat_avg2, year_class = brood_year, data_class = median_est)
