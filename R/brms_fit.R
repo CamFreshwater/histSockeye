@@ -233,7 +233,7 @@ brm1 <- brm_multiple(
   iter = 1800, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
                  ),
-  prior=c(prior(normal(60, 15), class="Intercept"),
+  prior=c(prior(normal(60, 10), class="Intercept"),
           prior(normal(5, 10), class="b", coef = "age52"),
           prior(normal(5, 10), class="b", coef = "age53"),
           prior(normal(5, 10), class="b", coef = "age63"),
