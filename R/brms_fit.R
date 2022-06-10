@@ -650,19 +650,7 @@ pred_dat4 <- expand.grid(
   sex = "male"
   ) %>% 
   mutate(
-    period = "Gilbert-Clemens"
-    # period = case_when(
-    #   year < 1947 ~ "Gilbert-Clemens",
-    #   year > 1972 & year < 1994 ~ "Monkley Dump",
-    #   year > 1993 ~ "Nisga'a",
-    #   TRUE ~ "Bilton"
-    # ),
-    # period = fct_relevel(as.factor(period), 
-    #                      "Gilbert-Clemens",
-    #                      "Bilton",
-    #                      "Monkley Dump",
-    #                      "Nisga'a")
-  ) %>% 
+    period = "Gilbert-Clemens") %>% 
   droplevels()
 post_pred4 <- posterior_predict(brm1, pred_dat4, allow_new_levels = TRUE)
 
@@ -671,6 +659,55 @@ age53 <- post_pred4[ , which(pred_dat4$age == "53")]
 age52 <- post_pred4[ , which(pred_dat4$age == "52")]
 age42 <- post_pred4[ , which(pred_dat4$age == "42")]
 age63 <- post_pred4[ , which(pred_dat4$age == "63")]
+age_list <- list(age53, age52, age42, age63)
+age_names <- c("53", "52", "42", "63")
+
+purrr::map2(age_list, age_names, function (x, y) {
+  #calc time series mean for each iteration
+  mu <- apply(x, 1, mean)
+  #difference from mean
+  diff <- x[ , ncol(x)] - mu
+  #difference from first obs
+  diff2 <- x[ , ncol(x)] - x[ , 1]
+  data.frame(
+    mean_diff1 = mean(diff),
+    mean_diff2 = mean(diff2),
+    low = quantile(diff2, probs = 0.05),
+    high = quantile(diff2, probs = 0.95),
+    age = y
+  )
+}) %>% 
+  bind_rows
+
+
+# as above but assuming differences among periods
+pred_dat5 <- expand.grid(
+  year = seq(min(dat$year), max(dat$year), by = 1),
+  age = unique(dat$age),
+  yday_c = 0,
+  sex = "male"
+) %>% 
+  mutate(
+     period = case_when(
+       year < 1947 ~ "Gilbert-Clemens",
+       year > 1972 & year < 1994 ~ "Monkley Dump",
+       year > 1993 ~ "Nisga'a",
+       TRUE ~ "Bilton"
+     ),
+     period = fct_relevel(as.factor(period), 
+                          "Gilbert-Clemens",
+                          "Bilton",
+                          "Monkley Dump",
+                          "Nisga'a")
+  ) %>% 
+  droplevels()
+post_pred5 <- posterior_predict(brm1, pred_dat5, allow_new_levels = TRUE)
+
+# time series mean by age
+age53 <- post_pred5[ , which(pred_dat5$age == "53")]
+age52 <- post_pred5[ , which(pred_dat5$age == "52")]
+age42 <- post_pred5[ , which(pred_dat5$age == "42")]
+age63 <- post_pred5[ , which(pred_dat5$age == "63")]
 age_list <- list(age53, age52, age42, age63)
 age_names <- c("53", "52", "42", "63")
 
