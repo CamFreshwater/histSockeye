@@ -968,13 +968,13 @@ brm_t1 <- brm(
   control = list(adapt_delta = 0.97, max_treedepth = 14
   ),
   prior=c(prior(normal(60, 10), class="Intercept"),
-          prior(normal(5, 10), class="b", coef = "age52"),
-          prior(normal(5, 10), class="b", coef = "age53"),
-          prior(normal(5, 10), class="b", coef = "age63"),
-          prior(normal(5, 10), class="b", coef = "sexmale"),
-          prior(normal(0, 10), class="b", coef = "periodBilton"),
-          prior(normal(0, 10), class="b", coef = "periodMonkleyDump"),
-          prior(normal(0, 10), class="b", coef = "periodNisgaa"),
+          prior(normal(5, 5), class="b", coef = "age52"),
+          prior(normal(5, 5), class="b", coef = "age53"),
+          prior(normal(5, 5), class="b", coef = "age63"),
+          prior(normal(5, 5), class="b", coef = "sexmale"),
+          prior(normal(0, 5), class="b", coef = "periodBilton"),
+          prior(normal(0, 5), class="b", coef = "periodMonkleyDump"),
+          prior(normal(0, 5), class="b", coef = "periodNisgaa"),
           prior(normal(0, 5), class="b", coef = "syear_1"),
           prior(normal(0, 5), class="b", coef = "syday_c_1"),
           prior(normal(0, 2.5), class="b", dpar = "sigma"),
@@ -1008,8 +1008,8 @@ brm_t2 <- brm(
           prior(normal(0, 5), class="b", coef = "syear_1"),
           prior(normal(0, 5), class="b", coef = "syday_c_1"),
           prior(normal(0, 2.5), class="b", dpar = "sigma"),
-          prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
-          # prior(exponential(0.5), class = "Intercept", dpar = "sigma")
+          # prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
+          prior(cauchy(0, 1), class = "Intercept", dpar = "sigma")
   )
 )
 tictoc::toc()
