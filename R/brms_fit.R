@@ -7,7 +7,9 @@
 # Update w/ edited data
 # -------------------------------------------------
 
-library(tidyverse)
+# library(tidyverse)
+library(dplyr)
+library(forcats)
 library(brms)
 library(tidybayes)
 library(posterior)
@@ -302,7 +304,8 @@ dev.off()
 
 ## POSTERIOR ESTIMATES ---------------------------------------------------------
 
-brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
+brm1 <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls_v3.rds"))
+brm1_old <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 
 draws <- as_draws_array(brm1)
 sum_draws <- summarise_draws(draws, default_summary_measures())
@@ -468,9 +471,9 @@ fit_draws <- add_epred_draws(pred_dat, brm1, re_formula = NULL,
 fit_draws2 <- fit_draws %>% 
   group_by(year, age, age_f, yday_c, sex, period) %>% 
   summarize(
-    median = median(.value),
-    low = quantile(.value, probs = 0.05),
-    up = quantile(.value, probs = 0.95),
+    median = median(.epred),
+    low = quantile(.epred, probs = 0.05),
+    up = quantile(.epred, probs = 0.95),
     .groups = "drop"
   ) 
 # saveRDS(fit_draws2,
@@ -491,7 +494,7 @@ fit_pred <- ggplot(fit_draws2 %>% filter(sex == "female"),
   )
   
 
-png(here::here("outputs", "figs", "smooth_1period_fit.png"), 
+png(here::here("outputs", "figs", "smooth_1period_fit_2.png"), 
     height = 4, width = 5, units = "in", res = 250)
 fit_pred
 dev.off()
@@ -544,7 +547,7 @@ smooth_pred2 <- post_ribbon2 +
   scale_fill_discrete(name = "Sampling\nPeriod") +
   labs(x = "Year", y = "Fork Length (cm)")
 
-png(here::here("outputs", "figs", "smooth_4periods.png"), 
+png(here::here("outputs", "figs", "smooth_4periods_2.png"), 
     height = 4, width = 5.5,
     units = "in", res = 250)
 smooth_pred2
@@ -850,7 +853,7 @@ gam1 <- gam(
   fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) + 
     s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
     age + sex + period, 
-  data = dat %>% sample_n(., 10000),
+  data = dat,
   method = "REML"
 )
 gam2 <- gam(
@@ -937,3 +940,76 @@ gam2 <- gam(
   data = c_dat,
   method = "REML"
 )
+
+
+
+## TEST PRIORS -----------------------------------------------------------------
+
+trim_dat <- dat %>% sample_n(5000)
+
+brms::get_prior(bf(
+  fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+    s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+    age + sex + period,
+  sigma ~ period
+),
+data = trim_dat)
+
+tictoc::tic()
+brm_t1 <- brm(
+  bf(
+    fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+      s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+      age + sex + period,
+    sigma ~ period
+  ),
+  data = trim_dat, seed = 17,
+  iter = 1500, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
+  control = list(adapt_delta = 0.97, max_treedepth = 14
+  ),
+  prior=c(prior(normal(60, 10), class="Intercept"),
+          prior(normal(5, 10), class="b", coef = "age52"),
+          prior(normal(5, 10), class="b", coef = "age53"),
+          prior(normal(5, 10), class="b", coef = "age63"),
+          prior(normal(5, 10), class="b", coef = "sexmale"),
+          prior(normal(0, 10), class="b", coef = "periodBilton"),
+          prior(normal(0, 10), class="b", coef = "periodMonkleyDump"),
+          prior(normal(0, 10), class="b", coef = "periodNisgaa"),
+          prior(normal(0, 5), class="b", coef = "syear_1"),
+          prior(normal(0, 5), class="b", coef = "syday_c_1"),
+          prior(normal(0, 2.5), class="b", dpar = "sigma"),
+          prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
+          # prior(exponential(0.5), class = "Intercept", dpar = "sigma")
+  )
+)
+tictoc::toc()
+
+
+tictoc::tic()
+brm_t2 <- brm(
+  bf(
+    fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
+      s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+      age + sex + period,
+    sigma ~ period
+  ),
+  data = trim_dat, seed = 17,
+  iter = 1500, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
+  control = list(adapt_delta = 0.97, max_treedepth = 14
+  ),
+  prior=c(prior(normal(60, 10), class="Intercept"),
+          prior(normal(5, 5), class="b", coef = "age52"),
+          prior(normal(5, 5), class="b", coef = "age53"),
+          prior(normal(5, 5), class="b", coef = "age63"),
+          prior(normal(5, 5), class="b", coef = "sexmale"),
+          prior(normal(0, 5), class="b", coef = "periodBilton"),
+          prior(normal(0, 5), class="b", coef = "periodMonkleyDump"),
+          prior(normal(0, 5), class="b", coef = "periodNisgaa"),
+          prior(normal(0, 5), class="b", coef = "syear_1"),
+          prior(normal(0, 5), class="b", coef = "syday_c_1"),
+          prior(normal(0, 2.5), class="b", dpar = "sigma"),
+          prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
+          # prior(exponential(0.5), class = "Intercept", dpar = "sigma")
+  )
+)
+tictoc::toc()
