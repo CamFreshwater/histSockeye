@@ -7,7 +7,7 @@
 # Update w/ edited data
 # -------------------------------------------------
 
-# library(tidyverse)
+library(tidyverse)
 library(dplyr)
 library(forcats)
 library(brms)
@@ -56,7 +56,7 @@ dat <- dat_in %>%
                          "Nisga'a"),
     fl_cm = fl / 10,
     # add random identifier to split datasets for subsetting,
-    data_group = sample.int(8, nrow(.), replace = T)
+    data_group = sample.int(4, nrow(.), replace = T)
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
@@ -232,22 +232,21 @@ brm1 <- brm_multiple(
     sigma ~ period
   ),
   data = split_dat, seed = 17,
-  iter = 1800, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
+  iter = 1800, thin = 10, chains = 4, warmup = 600, cores = 4, #refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
                  ),
   prior=c(prior(normal(60, 10), class="Intercept"),
-          prior(normal(5, 10), class="b", coef = "age52"),
-          prior(normal(5, 10), class="b", coef = "age53"),
-          prior(normal(5, 10), class="b", coef = "age63"),
-          prior(normal(5, 10), class="b", coef = "sexmale"),
-          prior(normal(0, 10), class="b", coef = "periodBilton"),
-          prior(normal(0, 10), class="b", coef = "periodMonkleyDump"),
-          prior(normal(0, 10), class="b", coef = "periodNisgaa"),
+          prior(normal(5, 5), class="b", coef = "age52"),
+          prior(normal(5, 5), class="b", coef = "age53"),
+          prior(normal(5, 5), class="b", coef = "age63"),
+          prior(normal(5, 5), class="b", coef = "sexmale"),
+          prior(normal(0, 5), class="b", coef = "periodBilton"),
+          prior(normal(0, 5), class="b", coef = "periodMonkleyDump"),
+          prior(normal(0, 5), class="b", coef = "periodNisgaa"),
           prior(normal(0, 5), class="b", coef = "syear_1"),
           prior(normal(0, 5), class="b", coef = "syday_c_1"),
-          prior(normal(0, 2.5), class="b", dpar = "sigma"),
-          prior(exponential(0.5), class = "Intercept", dpar = "sigma")
-  )
+          prior(normal(0, 1), class="b", dpar = "sigma"),
+          prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma"))
 )
 tictoc::toc()
 
@@ -444,18 +443,18 @@ pred_dat <- expand.grid(
   left_join(., dat %>% dplyr::select(age, age_f) %>% distinct(), by = "age") %>% 
   droplevels()
 
-# post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
-# pred_dat_bayes <- pred_dat %>% 
-#   mutate(
-#     median = apply(post_pred, 2, median),
-#     low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
-#     up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
-#   ) 
-# 
+post_pred <- posterior_predict(brm1, pred_dat, allow_new_levels = TRUE)
+pred_dat_bayes <- pred_dat %>%
+  mutate(
+    median = apply(post_pred, 2, median),
+    low = apply(post_pred, 2, function (x) quantile(x, probs = 0.05)),
+    up = apply(post_pred, 2, function (x) quantile(x, probs = 0.95))
+  )
+
 # smooth_pred1 <- ggplot(pred_dat_bayes, aes(x = year, y = median)) +
 #   geom_line() +
 #   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
-#   facet_grid(sex~age) + 
+#   facet_grid(sex~age) +
 #   ggsidekick::theme_sleek() +
 #   labs(x = "Year", y = "Fork Length (cm)")
 # 
@@ -894,8 +893,7 @@ gam1 <- gam(
   method = "REML"
 )
 gam2 <- gam(
-  fl_cm ~ s(yday_c, m = 2, k = 3) + s(yday_c, by = age, m = 1, k = 3) +
-    s(year, m = 2, k = 5) + s(year, by = age, m = 1, k = 5) +
+  fl_cm ~ s(yday_c, by = age, m = 2, k = 3) + s(year, by = age, m = 2, k = 5) +
     age + sex + period, 
   data = dat,
   method = "REML"
@@ -1001,7 +999,7 @@ brm_t1 <- brm(
     sigma ~ period
   ),
   data = trim_dat, seed = 17,
-  iter = 1500, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
+  iter = 1500, thin = 10, chains = 4, warmup = 500, cores = 4,#refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
   ),
   prior=c(prior(normal(60, 10), class="Intercept"),
@@ -1014,12 +1012,13 @@ brm_t1 <- brm(
           prior(normal(0, 5), class="b", coef = "periodNisgaa"),
           prior(normal(0, 5), class="b", coef = "syear_1"),
           prior(normal(0, 5), class="b", coef = "syday_c_1"),
-          prior(normal(0, 2.5), class="b", dpar = "sigma"),
+          prior(normal(0, 1), class="b", dpar = "sigma"),
           prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
           # prior(exponential(0.5), class = "Intercept", dpar = "sigma")
   )
 )
 tictoc::toc()
+
 
 
 tictoc::tic()
