@@ -73,11 +73,59 @@ if (Sys.info()['sysname'] == "Windows") {
 
 dat_trim <- dat %>% sample_n(30000)
 
-# fit simple model
-fit0 <- sdmTMB(fl_cm ~ age + sex + period,
-               dispformula = ~ period,
-               data = dat_trim,
-               mesh = pcod_spde,
-               spatial = "off")
+# make fake mesh
+dat$x <- runif(nrow(dat))
+dat$y <- runif(nrow(dat))
+dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 25)
 
-## won't fit because no spatial data included
+fit <- sdmTMB(fl_cm ~ s(yday_c, m = 2, k = 3) + 
+                s(yday_c, by = age, m = 1, k = 3) +
+                s(year, m = 2, k = 5) + 
+                s(year, by = age, m = 1, k = 5) +
+                age + sex + period,
+              dispformula = ~ period,
+              data = dat_trim,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off")
+fit2 <- sdmTMB(fl_cm ~  s(yday_c, m = 2, k = 3) + 
+                 s(yday_c, by = age, m = 1, k = 3) +
+                 s(year, m = 2, k = 5) + 
+                 s(year, by = age, m = 1, k = 5) +
+                 age + sex + period,
+               dispformula = ~ period,
+               data = dat,
+               mesh = dum_mesh,
+               spatial = "off"#, 
+               # spatiotemporal = "off"
+               )
+
+brm1_old <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
+
+
+# fixed effects predictions
+new_dat <- expand.grid(
+  age = unique(dat_trim$age),
+  sex = unique(dat_trim$sex),
+  period = unique(dat_trim$period),
+  yday_c = 0,
+  year = 1969,#mean(dat_trim$year),
+  # dummy spatial variables required 
+  x = runif(1),
+  y = runif(1)
+) 
+
+fe_preds <- predict(fit2, newdata = new_dat, re_form = NA, se_fit = TRUE)
+fe_preds <- predict(fit2, re_form = NA, se_fit = TRUE)
+fe_preds <- predict(fit2, re_form = NA, se_fit = FALSE)
+
+
+
+m2 <- sdmTMB(
+  density ~ 0 + depth_scaled + depth_scaled2 + as.factor(year),
+  data = pcod_2011, time = "year", mesh = pcod_mesh_2011, family = tweedie(link = "log"),
+  dispformula = ~ 0 + as.factor(year),
+  spatial = "off", spatiotemporal = "off"
+)
+p <- predict(m2, re_form = NA, se_fit = TRUE)
+head(p[,c("est", "est_se")])
