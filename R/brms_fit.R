@@ -1012,9 +1012,7 @@ brm_t1 <- brm(
           prior(normal(0, 5), class="b", coef = "periodNisgaa"),
           prior(normal(0, 5), class="b", coef = "syear_1"),
           prior(normal(0, 5), class="b", coef = "syday_c_1"),
-          prior(normal(0, 1), class="b", dpar = "sigma"),
-          prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
-          # prior(exponential(0.5), class = "Intercept", dpar = "sigma")
+          prior(normal(0, 1), class="b", dpar = "sigma")
   )
 )
 tictoc::toc()
@@ -1041,11 +1039,9 @@ brm_t2 <- brm(
           prior(normal(0, 5), class="b", coef = "periodBilton"),
           prior(normal(0, 5), class="b", coef = "periodMonkleyDump"),
           prior(normal(0, 5), class="b", coef = "periodNisgaa"),
-          prior(normal(0, 5), class="b", coef = "syear_1"),
-          prior(normal(0, 5), class="b", coef = "syday_c_1"),
-          prior(normal(0, 2.5), class="b", dpar = "sigma"),
-          # prior(student_t(3, 0, 2.5), class = "Intercept", dpar = "sigma")
-          prior(cauchy(0, 1), class = "Intercept", dpar = "sigma")
+          prior(normal(0, 30), class="b", coef = "syear_1"),
+          prior(normal(0, 30), class="b", coef = "syday_c_1"),
+          prior(normal(0, 1), class="b", dpar = "sigma")
   )
 )
 tictoc::toc()
