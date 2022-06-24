@@ -142,15 +142,18 @@ mean_dat_plotting <- mean_dat %>%
   ungroup() %>% 
   droplevels() 
 
-shape_pal <- c(22, 21)
-names(shape_pal) <- c("annual average", "individual measurements")
+fill_pal <- c("black", "white")
+names(fill_pal) <- c("annual average", "individual measurements")
+shape_pal <- c(21, 22, 23, 24)
+names(shape_pal) <- unique(mean_dat_plotting$period)
+
 
 annual_dot <- ggplot(
   mean_dat_plotting, 
   aes(x = as.numeric(as.character(year_f)))
 ) +
-  geom_pointrange(aes(y = mean_fl, fill = period, ymin = lo, ymax = up, 
-                      shape = data)) +
+  geom_pointrange(aes(y = mean_fl, fill = data, ymin = lo, ymax = up, 
+                      shape = period)) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
@@ -158,10 +161,9 @@ annual_dot <- ggplot(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   ) +
-  # geom_vline(xintercept = 1966, col = "red", lty = 2) +
   geom_hline(aes(yintercept = overall_mean), lty = 2) +
-  scale_fill_discrete(name = "Sampling\nPeriod") +
-  scale_shape_manual(values = shape_pal, name = "Dataset") +
+  scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
+  scale_fill_manual(values = fill_pal, name = "Dataset") +
   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 
@@ -1028,7 +1030,7 @@ brm_t2 <- brm(
     sigma ~ period
   ),
   data = trim_dat, seed = 17,
-  iter = 1500, thin = 10, chains = 4, warmup = 750, #refresh = 0,  
+  iter = 1500, thin = 10, chains = 4, warmup = 750, cores = 4,#refresh = 0,  
   control = list(adapt_delta = 0.97, max_treedepth = 14
   ),
   prior=c(prior(normal(60, 10), class="Intercept"),
