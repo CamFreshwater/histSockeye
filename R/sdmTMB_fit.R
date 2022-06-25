@@ -76,7 +76,7 @@ dat_trim <- dat %>% sample_n(30000)
 # make fake mesh
 dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
-dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 25)
+dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
 fit <- sdmTMB(fl_cm ~ s(yday_c, m = 2, k = 3) + 
                 s(yday_c, by = age, m = 1, k = 3) +
