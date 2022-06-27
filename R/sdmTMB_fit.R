@@ -56,6 +56,140 @@ dat <- dat_in %>%
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
+# RAW DATA PLOTS ---------------------------------------------------------------
+
+# add dummy year levels for missing data
+dat2 <- expand.grid(
+  year_f = seq(min(dat$year), max(dat$year), by = 1) %>% as.factor(),
+  age = unique(dat$age),
+  sex = unique(dat$sex)
+) %>% 
+  left_join(., dat, by = c("year_f", "age", "sex")) 
+
+mean_dat <- dat2 %>% 
+  group_by(year_f, age, age_f, period, sex) %>% 
+  summarize(
+    n = n(),
+    mean_yday = mean(yday, na.rm = T),
+    sd_yday = sd(yday_c, na.rm = T),
+    mean_fl = mean(fl, na.rm = T),
+    sd_fl = sd(fl, na.rm = T),
+    se_fl = sd_fl / sqrt(n),
+    up = mean_fl + (1.96 * se_fl),
+    lo = mean_fl - (1.96 * se_fl),
+    .groups = "drop"
+  ) %>% 
+  distinct() 
+empty_yrs <- mean_dat %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
+
+# write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
+#           row.names = FALSE)
+
+
+# add in averages for years that are missing individual samples
+dat_avg <- read.table(here::here("data", "nasscenturyavgv3FLAT.txt"),
+                      header = TRUE) %>%
+  pivot_longer(cols = -(iy.)) %>%
+  mutate(
+    year_f = as.factor(iy.),
+    sex = ifelse(grepl("m", name), "male", "female") %>% as.factor,
+    age = case_when(
+      grepl("42", name) ~ "42",
+      grepl("52", name) ~ "52",
+      grepl("53", name) ~ "53",
+      grepl("63", name) ~ "63"
+    ) %>%
+      as.factor(),
+    period = case_when(
+      iy. < 1957 ~ "Gilbert-Clemens",
+      iy. > 1972 & iy. < 1994 ~ "Monkley Dump",
+      iy. > 1993 ~ "Nisga'a",
+      TRUE ~ "Bilton"
+    ),
+    age_f = age,
+    period = fct_relevel(as.factor(period),
+                         "Gilbert-Clemens",
+                         "Bilton",
+                         "Monkley Dump",
+                         "Nisga'a"),
+    lo = NaN,
+    up = NaN,
+    data = "annual average"
+  ) %>%
+  filter(year_f %in% empty_yrs,
+         sex == "female") %>% 
+  select(year_f, mean_fl = value, period, lo, up, age_f, data)
+levels(dat_avg$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+
+mean_dat_plotting <- mean_dat %>% 
+  mutate(data = "individual measurements") %>% 
+  filter(sex == "female",
+         !is.na(period)) %>% 
+  select(year_f, mean_fl, period, lo, up, age_f, data) %>%
+  rbind(., dat_avg) %>% 
+  group_by(age_f) %>% 
+  mutate(
+    mean_fl = mean_fl / 10,
+    lo = lo / 10,
+    up = up / 10,
+    overall_mean = mean(mean_fl, na.rm = T)) %>% 
+  ungroup() %>% 
+  droplevels() 
+
+fill_pal <- c("black", "white")
+names(fill_pal) <- c("annual average", "individual measurements")
+shape_pal <- c(21, 22, 23, 24)
+names(shape_pal) <- unique(dat$period)
+
+
+annual_dot <- ggplot(
+  mean_dat_plotting, 
+  aes(x = as.numeric(as.character(year_f)))
+) +
+  geom_pointrange(aes(y = mean_fl, fill = data, ymin = lo, ymax = up, 
+                      shape = period)) +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length") +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  ) +
+  geom_hline(aes(yintercept = overall_mean), lty = 2) +
+  scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
+  scale_fill_manual(values = fill_pal, name = "Dataset") +
+  guides(fill = guide_legend(override.aes = list(shape = 21)))
+
+
+# annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
+#   facet_grid(~age) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "SD Fork Length") +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = sd_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# export
+png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
+    res = 250, units = "in")
+annual_dot
+dev.off()
+
+# png(here::here("outputs", "figs", "annual_box.png"), width = 11, height = 7,
+#     res = 250, units = "in")
+# annual_box
+# dev.off()
+
 
 # FIT MODEL  -------------------------------------------------------------------
 
@@ -71,39 +205,49 @@ if (Sys.info()['sysname'] == "Windows") {
   doMC::registerDoMC(ncores)
 }
 
-dat_trim <- dat %>% sample_n(30000)
+dat_trim <- dat# %>% sample_n(30000)
 
 # make fake mesh
-dat$x <- runif(nrow(dat))
-dat$y <- runif(nrow(dat))
-dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
+dat_trim$x <- runif(nrow(dat_trim))
+dat_trim$y <- runif(nrow(dat_trim))
+dum_mesh <- make_mesh(dat_trim, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ s(yday_c, m = 2, k = 3) + 
-                s(yday_c, by = age, m = 1, k = 3) +
-                s(year, m = 2, k = 5) + 
+fit <- sdmTMB(fl_cm ~ s(yday_c, m = 2, k = 5) + 
+                s(yday_c, by = age, m = 1, k = 5) +
+                s(year, m = 2, k = 5) +
                 s(year, by = age, m = 1, k = 5) +
                 age + sex + period,
               dispformula = ~ period,
               data = dat_trim,
               mesh = dum_mesh,
               spatial = "off",
-              spatiotemporal = "off")
-fit2 <- sdmTMB(fl_cm ~  s(yday_c, m = 2, k = 3) + 
-                 s(yday_c, by = age, m = 1, k = 3) +
-                 s(year, m = 2, k = 5) + 
-                 s(year, by = age, m = 1, k = 5) +
-                 age + sex + period,
-               dispformula = ~ period,
-               data = dat,
-               mesh = dum_mesh,
-               spatial = "off"#, 
-               # spatiotemporal = "off"
-               )
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 1
+              ))
 
 brm1_old <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
 
 
-# fixed effects predictions
+fit2 <- sdmTMB(fl_cm ~ #s(yday_c, m = 2, k = 5) + 
+                s(yday_c, by = age, m = 2, k = 5) +
+                #s(year, m = 2, k = 5) +
+                s(year, by = age, m = 2, k = 5) +
+                age + sex + period,
+              dispformula = ~ period,
+              data = dat_trim,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 1
+              ))
+
+
+# CATEGORICAL PREDICTIONS  -----------------------------------------------------
+
 new_dat <- expand.grid(
   age = unique(dat_trim$age),
   sex = unique(dat_trim$sex),
@@ -113,19 +257,217 @@ new_dat <- expand.grid(
   # dummy spatial variables required 
   x = runif(1),
   y = runif(1)
+) %>% 
+  mutate(
+    age_f = as.factor(age)
+  )
+levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+
+
+fe_preds <- predict(fit, newdata = new_dat, re_form = NA, se_fit = TRUE)
+fe_preds$low <- fe_preds$est + (qnorm(0.025) * fe_preds$est_se)
+fe_preds$up <- fe_preds$est + (qnorm(0.975) * fe_preds$est_se)
+
+period_eff_dot <- fe_preds %>% 
+  filter(age == "42",
+         sex == "male") %>% 
+  ggplot(.) +
+  geom_pointrange(aes(x = period, y = est, shape = period, 
+                      ymin = low, ymax = up),
+                  fill = "white") +
+  scale_shape_manual(values = shape_pal) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Sampling Period", y = "Estimated Mean") +
+  theme(legend.position = "none")
+
+
+age_eff_dot <- fe_preds %>% 
+  filter(period == "Gilbert-Clemens",
+         sex == "male") %>% 
+  ggplot(.) +
+  geom_pointrange(aes(x = age, y = est, ymin = low, ymax = up, fill = age),
+                  shape = 21
+  ) +
+  ggsidekick::theme_sleek() +
+  scale_x_discrete("Age Class", 
+                   labels = parse(text = as.character(levels(fe_preds$age_f)))) +
+  labs(x = "Age Class", y = "Estimated Mean") +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none") 
+
+
+sex_eff_dot <- fe_preds %>% 
+  filter(period == "Gilbert-Clemens",
+         age == "42") %>% 
+  ggplot(.) +
+  geom_pointrange(aes(x = sex, y = est, fill = sex, ymin = low, ymax = up),
+                  shape = 21) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Sex", y = "Estimated Mean") +
+  scale_fill_brewer(palette = 5, type = "seq") +
+  theme(legend.position = "none")
+
+
+# sigma estimates
+period_sig <- data.frame(
+  sig_est = fit2$sd_report$par.fixed[names(fit2$sd_report$par.fixed) == "b_disp_k"],
+  sig_se = sqrt(diag(fit2$sd_report$cov.fixed[rownames(fit2$sd_report$cov.fixed) == "b_disp_k", 
+                                              colnames(fit2$sd_report$cov.fixed) == "b_disp_k"])),
+  period = unique(dat$period)
+) %>% 
+  mutate(
+    sig_est = ifelse(
+      period == "Gilbert-Clemens",
+      sig_est,
+      sig_est + 
+        fit2$sd_report$par.fixed[names(fit2$sd_report$par.fixed) == "b_disp_k"][1]
+    ),
+    low = sig_est + (qnorm(0.025) * sig_se),
+    up = sig_est + (qnorm(0.975) * sig_se)
+  )
+
+period_sig_dot <- ggplot(period_sig) +
+  geom_pointrange(aes(x = period, y = sig_est, shape = period, 
+                      ymin = low, ymax = up),
+                  fill = "white") +
+  scale_shape_manual(values = shape_pal) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Sampling Period", y = "Estimated Variance") +
+  theme(legend.position = "none")
+
+
+# combine all fixed effects figs
+png(here::here("outputs", "figs", "main_effect.png"), 
+    height = 5, width = 8.5,
+    units = "in", res = 250)
+cowplot::plot_grid(period_eff_dot,
+                   age_eff_dot,
+                   sex_eff_dot,
+                   period_sig_dot, ncol = 2)
+dev.off()
+
+
+# SMOOTH PREDICTIONS  ----------------------------------------------------------
+
+
+# year effects (assuming fixed period)
+new_dat2 <- expand.grid(
+  age = unique(dat$age),
+  sex = "male",
+  period = "Gilbert-Clemens",
+  yday_c = 0,
+  year = seq(min(dat$year), max(dat$year), length = 100),
+  # dummy spatial variables required 
+  x = runif(1),
+  y = runif(1)
 ) 
 
-fe_preds <- predict(fit2, newdata = new_dat, re_form = NA, se_fit = TRUE)
-fe_preds <- predict(fit2, re_form = NA, se_fit = TRUE)
-fe_preds <- predict(fit2, re_form = NA, se_fit = FALSE)
+smooth_preds <- predict(fit, newdata = new_dat2, re_form = NA, se_fit = TRUE)
+smooth_preds$low <- smooth_preds$est + (qnorm(0.025) * smooth_preds$est_se)
+smooth_preds$up <- smooth_preds$est + (qnorm(0.975) * smooth_preds$est_se)
+
+ggplot(smooth_preds, 
+       aes(x = year, est)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  # geom_vline(xintercept = 1966, col = "red", lty = 2) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (cm)") +
+  facet_wrap(~age, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
 
 
+# year day effects
+new_dat3 <- expand.grid(
+  age = unique(dat$age),
+  sex = "male",
+  period = "Gilbert-Clemens",
+  yday_c = seq(-47, 65, length = 100),
+  year = 1969,
+  # dummy spatial variables required 
+  x = runif(1),
+  y = runif(1)
+) 
 
-m2 <- sdmTMB(
-  density ~ 0 + depth_scaled + depth_scaled2 + as.factor(year),
-  data = pcod_2011, time = "year", mesh = pcod_mesh_2011, family = tweedie(link = "log"),
-  dispformula = ~ 0 + as.factor(year),
-  spatial = "off", spatiotemporal = "off"
+smooth_preds2 <- predict(fit, newdata = new_dat3, re_form = NA, se_fit = TRUE)
+smooth_preds2$low <- smooth_preds2$est + (qnorm(0.025) * smooth_preds2$est_se)
+smooth_preds2$up <- smooth_preds2$est + (qnorm(0.975) * smooth_preds2$est_se)
+
+ggplot(smooth_preds2, 
+       aes(x = yday_c, est)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (cm)") +
+  facet_wrap(~age, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
+
+
+# year effects (assuming variable period)
+period_sig <- data.frame(
+  sig_est = fit$sd_report$par.fixed[names(fit$sd_report$par.fixed) == "b_disp_k"],
+  period = unique(dat$period)
 )
-p <- predict(m2, re_form = NA, se_fit = TRUE)
-head(p[,c("est", "est_se")])
+new_dat4 <- expand.grid(
+  age = unique(dat$age),
+  sex = "male",
+  # period = "Gilbert-Clemens",
+  yday_c = 0,
+  year = seq(min(dat$year), max(dat$year), length = 100),
+  # dummy spatial variables required 
+  x = runif(1),
+  y = runif(1)
+) %>% 
+  mutate(
+    period = case_when(
+      year < 1957 ~ "Gilbert-Clemens",
+      year > 1972 & year < 1994 ~ "Monkley Dump",
+      year > 1993 ~ "Nisga'a",
+      TRUE ~ "Bilton"
+    ),
+    period = fct_relevel(as.factor(period), 
+                         "Gilbert-Clemens",
+                         "Bilton",
+                         "Monkley Dump",
+                         "Nisga'a")
+    ) %>% 
+  left_join(., period_sig, by = "period")
+
+smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
+
+# simulate 1000 values based on period specific fits and sigmas
+smooth_fit_per_tbl <- smooth_fit_per %>% 
+  as_tibble() %>% 
+  mutate(
+    sims = purrr::map2(est, sig_est, function (x, y) {
+      rnorm(1000, mean = x, sd = sqrt(y))
+    }) 
+  ) %>% 
+  unnest(cols = c(sims)) %>% 
+  group_by(age, sex, year, period) %>% 
+  summarize(
+    mean = est,
+    low = quantile(sims, 0.025),
+    up = quantile(sims, 0.975),
+    .groups = "drop") %>% 
+  distinct() %>% 
+  glimpse()
+
+ggplot(smooth_fit_per_tbl, 
+       aes(x = year, mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (cm)") +
+  facet_wrap(~age, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
+
