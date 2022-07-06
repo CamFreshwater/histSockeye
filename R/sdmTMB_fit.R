@@ -133,7 +133,7 @@ mean_dat_plotting <- mean_dat %>%
   filter(sex == "female",
          !is.na(period)) %>% 
   select(year_f, mean_fl, period, lo, up, age_f, data) %>%
-  rbind(., dat_avg %>% select(-age, -sex)) %>% 
+  rbind(., dat_avg %>% filter(sex == "female") %>% select(-age, -sex)) %>% 
   group_by(age_f) %>% 
   mutate(
     mean_fl = mean_fl / 10,
@@ -148,7 +148,7 @@ annual_dot <- ggplot(
   aes(x = as.numeric(as.character(year_f)))
 ) +
   geom_pointrange(aes(y = mean_fl, fill = data, ymin = lo, ymax = up, 
-                      shape = period)) +
+                      shape = period), size = 0.3) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length") +
@@ -162,23 +162,23 @@ annual_dot <- ggplot(
   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 
-annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = sd_fl, fill = period), shape = 21) +
-  facet_grid(~age) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "SD Fork Length") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
-  facet_wrap(~age) +
-  ggsidekick::theme_sleek() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
-ggplot(mean_dat, aes(x = year_f)) +
-  geom_point(aes(y = sd_yday, fill = period), shape = 21) +
-  facet_wrap(~age) +
-  ggsidekick::theme_sleek() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
+#   facet_grid(~age) +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "SD Fork Length") +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+#   facet_wrap(~age) +
+#   ggsidekick::theme_sleek() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+# 
+# ggplot(mean_dat, aes(x = year_f)) +
+#   geom_point(aes(y = sd_yday, fill = period), shape = 21) +
+#   facet_wrap(~age) +
+#   ggsidekick::theme_sleek() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 # export
 png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
@@ -194,7 +194,6 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-
 # dat_trim <- dat %>% sample_n(30000)
 
 # make fake mesh
@@ -202,23 +201,7 @@ dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
-                s(yday_c, by = age, m = 1, k = 5) +
-                s(year, m = 2, k = 5) +
-                s(year, by = age, m = 1, k = 5) +
-                period + age + sex,
-              dispformula = ~ 0 + period,
-              data = dat,
-              mesh = dum_mesh,
-              spatial = "off",
-              spatiotemporal = "off",
-              control = sdmTMBcontrol(
-                nlminb_loops = 2,
-                newton_loops = 2
-              ))
-saveRDS(fit, here::here("data", "sdmTMB_fit.rds"))
-
-fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 6) +
+fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 6) +
                 s(year, by = age, m = 2, k = 6) +
                 period + age + sex,
               dispformula = ~ 0 + period,
@@ -230,32 +213,6 @@ fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 6) +
                 nlminb_loops = 2,
                 newton_loops = 2
               ))
-saveRDS(fit2, here::here("data", "sdmTMB_fit_no_hyper.rds"))
-
-fit_gam <- mgcv::gam(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
-                       s(yday_c, by = age, m = 1, k = 5) +
-                       s(year, m = 2, k = 5) +
-                       s(year, by = age, m = 1, k = 5) +
-                       period + age + sex,
-                     data = dat)
-
-# brm1_old <- readRDS(here::here("outputs", "data", "brms_fits", "ind_ls.rds"))
-# 
-# 
-# fit2 <- sdmTMB(fl_cm ~ 0 + #s(yday_c, m = 2) + 
-#                  s(yday_c, by = age, m = 2) +
-#                  #s(year, m = 2) +
-#                  s(year, by = age, m = 2) +
-#                  period + age + sex,
-#                dispformula = ~ 0 + period,
-#                data = dat,
-#                mesh = dum_mesh,
-#                spatial = "off",
-#                spatiotemporal = "off",
-#                control = sdmTMBcontrol(
-#                  nlminb_loops = 2,
-#                  newton_loops = 1
-#                ))
 
 
 # check residuals
@@ -266,19 +223,35 @@ simulate(fit2, nsim = 500) %>%
 
 # COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
 
+# fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
+#                 s(yday_c, by = age, m = 1, k = 5) +
+#                 s(year, m = 2, k = 5) +
+#                 s(year, by = age, m = 1, k = 5) +
+#                 period + age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
+
+
 # use average measures not used to fit model to determine whether global smooths 
 # should be used
 
 # adjust average data for missing years to match predictions format
-dat_avg$fl_cm <- dat_avg$mean_fl / 10
-dat_avg$year <- as.numeric(as.character(dat_avg$year_f))
-dat_avg$yday_c <- 0
-
-global_pred <- predict(fit, newdata = dat_avg, re_form = NA)
-group_pred <- predict(fit2, newdata = dat_avg, re_form = NA)
-
-Metrics::rmse(global_pred$est, dat_avg$fl_cm)
-Metrics::rmse(group_pred$est, dat_avg$fl_cm)
+# dat_avg$fl_cm <- dat_avg$mean_fl / 10
+# dat_avg$year <- as.numeric(as.character(dat_avg$year_f))
+# dat_avg$yday_c <- 0
+# 
+# group_pred <- predict(fit, newdata = dat_avg, re_form = NA)
+# global_pred <- predict(fit2, newdata = dat_avg, re_form = NA)
+# 
+# Metrics::rmse(global_pred$est, dat_avg$fl_cm)
+# Metrics::rmse(group_pred$est, dat_avg$fl_cm)
 # group specific smooths have better predictions
 
 
@@ -300,7 +273,7 @@ new_dat <- expand.grid(
 levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
-fe_preds <- predict(fit2, newdata = new_dat, re_form = NA, se_fit = TRUE)
+fe_preds <- predict(fit, newdata = new_dat, re_form = NA, se_fit = TRUE)
 fe_preds$low <- fe_preds$est + (qnorm(0.025) * fe_preds$est_se)
 fe_preds$up <- fe_preds$est + (qnorm(0.975) * fe_preds$est_se)
 
@@ -346,9 +319,9 @@ sex_eff_dot <- fe_preds %>%
 
 # sigma estimates
 period_sig <- data.frame(
-  sig_est = fit2$sd_report$par.fixed[names(fit2$sd_report$par.fixed) == "b_disp_k"],
-  sig_se = sqrt(diag(fit2$sd_report$cov.fixed[rownames(fit2$sd_report$cov.fixed) == "b_disp_k", 
-                                              colnames(fit2$sd_report$cov.fixed) == "b_disp_k"])),
+  sig_est = fit$sd_report$par.fixed[names(fit$sd_report$par.fixed) == "b_disp_k"],
+  sig_se = sqrt(diag(fit$sd_report$cov.fixed[rownames(fit$sd_report$cov.fixed) == "b_disp_k", 
+                                              colnames(fit$sd_report$cov.fixed) == "b_disp_k"])),
   period = unique(dat$period)
 ) %>% 
   mutate(
@@ -368,7 +341,7 @@ period_sig_dot <- ggplot(period_sig) +
 
 # combine all fixed effects figs
 png(here::here("outputs", "figs", "main_effect.png"), 
-    height = 5, width = 8.5,
+    height = 5, width = 8,
     units = "in", res = 250)
 cowplot::plot_grid(period_eff_dot,
                    age_eff_dot,
@@ -396,7 +369,7 @@ new_dat2 <- expand.grid(
 levels(new_dat2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 # smoothed predictions
-smooth_preds <- predict(fit2, newdata = new_dat2, re_form = NA, se_fit = TRUE)
+smooth_preds <- predict(fit, newdata = new_dat2, re_form = NA, se_fit = TRUE)
 smooth_preds$low <- smooth_preds$est + (qnorm(0.025) * smooth_preds$est_se)
 smooth_preds$up <- smooth_preds$est + (qnorm(0.975) * smooth_preds$est_se)
 
@@ -412,7 +385,6 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
     expand = c(0.02, 0.02)
   )
 
-# combine all fixed effects figs
 png(here::here("outputs", "figs", "smooth_means_no_global.png"), 
     height = 5, width = 8.5,
     units = "in", res = 250)
@@ -421,6 +393,11 @@ dev.off()
 
 
 # smoothed predictions with GAM (just to check)
+# fit_gam <- mgcv::gam(fl_cm ~ 0  + s(yday_c, by = age, m = 2, k = 6) +
+#                        s(year, by = age, m = 2, k = 6) +
+#                        period + age + sex,
+#                      data = dat)
+#
 # smooth_preds_gam_vec <- predict(fit_gam, newdata = new_dat2, se.fit = TRUE)
 # smooth_preds_gam <- new_dat2
 # smooth_preds_gam$est <- smooth_preds_gam_vec$fit
@@ -437,7 +414,6 @@ dev.off()
 #     breaks = seq(1915, 2015, by = 20),
 #     expand = c(0.02, 0.02)
 #   )
-
 
 
 # year day effects
@@ -457,7 +433,7 @@ new_dat3 <- expand.grid(
 levels(new_dat2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
-smooth_preds2 <- predict(fit2, newdata = new_dat3, re_form = NA, se_fit = TRUE)
+smooth_preds2 <- predict(fit, newdata = new_dat3, re_form = NA, se_fit = TRUE)
 smooth_preds2$low <- smooth_preds2$est + (qnorm(0.025) * smooth_preds2$est_se)
 smooth_preds2$up <- smooth_preds2$est + (qnorm(0.975) * smooth_preds2$est_se)
 
@@ -472,6 +448,12 @@ smooth_yday <- ggplot(smooth_preds2,
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   )
+
+png(here::here("outputs", "figs", "yday_smooth_no_global.png"), 
+    height = 5, width = 8.5,
+    units = "in", res = 250)
+smooth_yday
+dev.off()
 
 
 # year effects (assuming variable period)
@@ -514,15 +496,15 @@ new_dat4 <- expand.grid(
 levels(new_dat4$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 new_dat4 <- left_join(new_dat4, samp_day, by = c("period", "age_f"))
 
-smooth_fit_per <- predict(fit2, newdata = new_dat4, re_form = NA)
+smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 
 
 # calculate prediction interval
 # (from https://rpubs.com/aaronsc32/regression-confidence-prediction-intervals)
-y.fit <- predict(fit2, re_form = NA)
-n <- length(fit2$data$fl_cm)
+y.fit <- predict(fit, re_form = NA)
+n <- length(fit$data$fl_cm)
 
-sse <- sum((fit2$data$fl_cm - y.fit$est)^2)
+sse <- sum((fit$data$fl_cm - y.fit$est)^2)
 mse <- sse / (n - 2)
 
 t.val <- qt(0.975, n - 2) # Critical value of t
@@ -530,26 +512,41 @@ t.val <- qt(0.975, n - 2) # Critical value of t
 pred.x <- smooth_fit_per$year
 pred.y <- smooth_fit_per$est
 
-mean.se.fit <- (1 / n + (pred.x - mean(fit2$data$year))^2 / (sum((fit2$data$year - mean(fit$data$year))^2))) # Standard error of the mean estimate
-pred.se.fit <- (1 + (1 / n) + (pred.x - mean(fit2$data$year))^2 / (sum((fit2$data$year - mean(dat$year))^2))) # Standard error of the prediction
+mean.se.fit <- (1 / n + (pred.x - mean(fit$data$year))^2 / (sum((fit$data$year - mean(fit$data$year))^2))) # Standard error of the mean estimate
+pred.se.fit <- (1 + (1 / n) + (pred.x - mean(fit$data$year))^2 / (sum((fit$data$year - mean(dat$year))^2))) # Standard error of the prediction
 
 smooth_fit_per$pred_up <- pred.y + t.val * sqrt(mse * pred.se.fit)
 smooth_fit_per$pred_low <- pred.y - t.val * sqrt(mse * pred.se.fit)
 
 
-ggplot(smooth_fit_per, 
+# include average predictions for context
+dat_avg_trim <- dat_avg %>% 
+  mutate(
+    fl_cm = mean_fl / 10,
+    year = as.numeric(as.character(year_f)),
+    yday_c = 0
+  ) %>% 
+  filter(sex == "female") %>% 
+  select(
+    year, fl_cm, dataset = data, period, age_f
+  )
+  
+# join with random subsample of predictions
+point_dat <- dat %>% 
+  mutate(dataset = "individual measurements") %>% 
+  filter(sex == "female") %>% 
+  select(colnames(dat_avg_trim)) %>% 
+  sample_n(1000) %>% 
+  rbind(., dat_avg_trim) 
+
+smooth_year_per <- ggplot(smooth_fit_per, 
        aes(x = year)) +
   geom_line(aes(y = est)) +
-  geom_point(data = dat %>%
-               filter(!is.na(period),
-                      sex == "female") %>%
-               sample_n(1000),
-             aes(y = fl_cm, shape = period),
-             fill = "white", alpha = 0.4) +
-  geom_point(data = dat_avg %>% filter(sex == "female"), 
-             aes(y = fl_cm), shape = 21, fill = "red") +
   geom_ribbon(aes(ymin = pred_low, ymax = pred_up), alpha = 0.3) +
-  scale_shape_manual(values = shape_pal, name = "Sampling Period") +
+  geom_point(data = point_dat, 
+             aes(y = fl_cm, shape = period, fill = dataset)) + 
+  scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
+  scale_fill_manual(values = fill_pal, name = "Dataset") +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
@@ -557,6 +554,12 @@ ggplot(smooth_fit_per,
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   )
+
+png(here::here("outputs", "figs", "year_smooth_period_no_global.png"), 
+    height = 5, width = 8.5,
+    units = "in", res = 250)
+smooth_year_per
+dev.off()
 
 
 # SUMMARY STATISTICS -----------------------------------------------------------
@@ -621,7 +624,7 @@ levels(fec_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 # simulate differences in fecundity assuming sigma equal to estimate for Nisga'a
 # sampling period
-fec_preds <- predict(fit2, newdata = fec_dat, re_form = NA)
+fec_preds <- predict(fit, newdata = fec_dat, re_form = NA)
 nsims <- 1000
 ndfw_sigma <- 1.335
 # Mason and West regression for Fulton River
@@ -678,14 +681,19 @@ diff_fecundity <- sim_dat %>%
 png(here::here("outputs", "figs", "fecundity_diff.png"), 
     height = 4, width = 5, units = "in", res = 250)
 ggplot(diff_fecundity) +
-  geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, ymax = rel_up)) +
+  geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, 
+                      ymax = rel_up)) +
   geom_hline(aes(yintercept = 0), lty = 2) +
   ggsidekick::theme_sleek() +
-  labs(y = "Difference in Relative Fecundity (2019-1914)") +
+  # labs(y = "Percent Decline in Fecundity (2019-1914)") +
   scale_x_discrete(
     "Age",
     labels = c(expression("4"["2"]), expression("5"["2"]), 
                expression("5"["3"]), expression("6"["3"]))
+  ) +
+  scale_y_continuous(
+    "Percent Decline in Fecundity (2019-1914)",
+    labels = c("-30%", "-20%", "-10%", "0%")
   ) +
   theme(legend.position = "none")
 dev.off()
