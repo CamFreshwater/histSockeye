@@ -235,8 +235,6 @@ ggplot(trim_dat) +
   ggsidekick::theme_sleek()
 
 
-
-
 # COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
 
 # fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
@@ -479,14 +477,14 @@ period_sig <- data.frame(
 )
 
 # period specific sampling day (varies by 3 weeks)
-samp_day <- dat %>% 
-  group_by(period, age_f) %>% 
-  summarize(yday_c = mean(yday_c))
+# samp_day <- dat %>% 
+#   group_by(period, age_f) %>% 
+#   summarize(yday_c = mean(yday_c))
 
 new_dat4 <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),
-  # yday_c = 0,
+  yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
   x = runif(1),
@@ -503,14 +501,12 @@ new_dat4 <- expand.grid(
                          "Gilbert-Clemens",
                          "Bilton",
                          "Monkley Dump",
-                         "Nisga'a")
-    ) %>% 
-  left_join(., period_sig, by = "period") %>% 
-  mutate(
+                         "Nisga'a"),
     age_f = as.factor(age)
-  )
+    )
+  # left_join(., period_sig, by = "period") %>% 
 levels(new_dat4$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
-new_dat4 <- left_join(new_dat4, samp_day, by = c("period", "age_f"))
+# new_dat4 <- left_join(new_dat4, samp_day, by = c("period", "age_f"))
 
 smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 
@@ -541,31 +537,113 @@ smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 # 3) generate new predictions (excluding residual variability)
 # 4) add random deviates based on sigma
 # https://fromthebottomoftheheap.net/2014/06/16/simultaneous-confidence-intervals-for-derivatives/
-sim_dat <- sdmTMB_simulate(
-  formula = ~ 1 + a1,
-  data = predictor_dat,
-  time = "year",
-  mesh = mesh,
-  family = gaussian(),
-  range = 0.5,
-  sigma_E = 0.1,
-  phi = 0.1,
-  sigma_O = 0.2,
-  seed = 42,
-  B = c(0.2, -0.4) # B0 = intercept, B1 = a1 slope
-)
 
-sim_pred <- simulate(fit, data = new_dat4, nsim = 500)
+source(here::here("R", "utils.R"))
 
-sim_pred <- sdmTMB_simulate(
-  formula = ~ 0 + s(yday_c, by = age, m = 2, k = 6) + 
-    s(year, by = age, m = 2, k = 6) + period + age + sex,
-  data = new_dat4 %>% filter(period == "Gilbert-Clemens"),
-  family = gaussian(),
-  phi = 0.9678908,
-  seed = 42,
-  B = fit$sd_report[ , "Estimate"]
-)
+## generate inputs for simulation (functions saved in utils.R; from sdmTMB)
+formula_no_sm <- remove_s_and_t2(fit$formula[[1]])
+X_ij <- model.matrix(formula_no_sm, data = dat)
+sm <- parse_smoothers(fit$formula[[1]], data = dat)
+pred_X_ij <- predict(mgcv::gam(formula_no_sm, data = dat), 
+                     new_dat4, type = "lpmatrix")
+sm_pred <- parse_smoothers(fit$formula[[1]], data = dat, 
+                           newdata = new_dat4)
+sm_start <- sm$b_smooth_start
+
+# model matrices
+pred_X1_ij = pred_X_ij
+pred_Zs = sm_pred$Zs
+pred_Xs = sm_pred$Xs
+
+# cov matrix and parameter estimates concatenated to same order as matrix rownames
+cov <- fit$sd_report$cov.fixed
+coef_list <- as.list(fit$sd_report, "Estimate")
+coef_vec <- c(coef_list$b_j, coef_list$b_disp_k, coef_list$bs, 
+              coef_list$ln_smooth_sigma)
+
+n_sims <- 1000
+cov_sim <- MASS::mvrnorm(n_sims, coef_vec, cov)
+b1_j <- cov_sim[ , grep("b_j", colnames(cov))] #fixed effect pars
+bs <- cov_sim[ , grep("bs", colnames(cov))] # fixed effect smooths
+ssdr <- summary(fit$sd_report) 
+b_smooth <- ssdr[rownames(ssdr) == "b_smooth", "Estimate"] %>% as.numeric() #random smooths
+
+# save sigmas as separate dataframe that can be joined 
+sigmas <- cov_sim[ , grep("b_disp_k", colnames(cov))] # residual variance
+colnames(sigmas) <- paste("sigma_", seq(1, ncol(sigmas)), sep = "")
+sigma_dat <- sigmas %>% 
+  as.data.frame() %>% 
+  mutate(
+    iter = seq(1, nrow(sigmas), by = 1)
+  ) %>% 
+  pivot_longer(
+    cols = -iter,
+    names_to = "sigma_p",
+    values_to = "sigma_est"
+  ) %>% 
+  mutate(
+    period = factor(sigma_p, labels = levels(dat$period))
+  ) 
+
+
+# generate predictions (based on code adapted from sdmTMB.cpp)
+sim_list <- vector(mode = "list", length = n_sims)
+
+for (i in seq_len(n_sims)) {
+  pred_mu1 <- pred_X1_ij %*% b1_j[i, ]
+  
+  pred_smooth <- matrix(NA, nrow(pred_X1_ij), length(sm_start))
+  
+  for (ss in seq_along(sm_start)) {
+    beta_ss <- rep(NA, times = ncol(pred_Zs[[ss]]))
+    for (j in seq_along(beta_ss)) {
+      beta_ss[j] <- b_smooth[sm_start[ss] + j]
+    }
+    pred_smooth[ , ss] <- pred_Zs[[ss]] %*% beta_ss
+  }
+  
+  pred_smooth1_i <- apply(pred_smooth, 1, sum)
+  pred_smooth2_i <- pred_Xs %*% bs[i, ]
+  pred_smooth_i <- pred_smooth1_i + pred_smooth2_i
+  pred_mu_i <- pred_mu1 + pred_smooth_i
+  
+  sim_list[[i]] <- new_dat4 %>% 
+    mutate(
+      iter = i,
+      pred_mu = as.numeric(pred_mu_i)
+    ) %>% 
+    left_join(
+      ., sigma_dat, by = c("iter", "period")
+    ) %>% 
+    mutate(
+      sim_obs = rnorm(pred_mu, pred_mu, sqrt(sigma_est))
+    )
+}
+
+sim_dat <- sim_list %>% 
+  bind_rows() %>% 
+  group_by(age, sex, year, period, age_f) %>% 
+  summarize(
+    up_pred_mu = quantile(pred_mu, 0.975),
+    low_pred_mu = quantile(pred_mu, 0.025),
+    pred_mu = mean(pred_mu),
+    up_sim_obs = quantile(sim_obs, 0.975),
+    low_sim_obs = quantile(sim_obs, 0.025),
+    sim_obs = mean(sim_obs),
+    .groups = "drop"
+  ) 
+
+sim_list %>% 
+  bind_rows %>% 
+  filter(
+    sex == "female",
+    iter %in% seq(1, 10, by = 1)
+  ) %>% 
+  ggplot(., 
+         aes(x = year)) +
+  geom_line(aes(y = sim_obs, colour = as.factor(iter))) +
+  facet_wrap(~age_f)
+  glimpse()
 
 # include average predictions for context
 dat_avg_trim <- dat_avg %>% 
@@ -587,14 +665,14 @@ point_dat <- dat %>%
   sample_n(1000) %>% 
   rbind(., dat_avg_trim) 
 
-smooth_year_per <- ggplot(smooth_fit_per, 
+smooth_year_per <- ggplot(sim_dat %>% filter(sex == "female"), 
        aes(x = year)) +
-  geom_line(aes(y = est)) +
-  geom_ribbon(aes(ymin = pred_low, ymax = pred_up), alpha = 0.3) +
-  geom_point(data = point_dat, 
-             aes(y = fl_cm, shape = period, fill = dataset)) + 
-  scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
-  scale_fill_manual(values = fill_pal, name = "Dataset") +
+  geom_line(aes(y = sim_obs)) +
+  geom_ribbon(aes(ymin = low_sim_obs, ymax = up_sim_obs), alpha = 0.3) +
+  # geom_point(data = point_dat,
+  #            aes(y = fl_cm, shape = period, fill = dataset)) +
+  # scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
+  # scale_fill_manual(values = fill_pal, name = "Dataset") +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
