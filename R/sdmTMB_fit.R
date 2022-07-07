@@ -215,10 +215,26 @@ fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 6) +
               ))
 
 
+
 # check residuals
-simulate(fit2, nsim = 500) %>% 
-  dharma_residuals(fit2)
+sims <- simulate(fit, nsim = 500)
+sims %>% 
+  dharma_residuals(fit)
 # looks good
+
+
+dat$resids <- resid(fit, type = "response")
+dat$resids2 <- resid(fit_gam, type = "response")
+trim_dat <- dat %>% 
+  sample_n(30000) %>% 
+  filter(sex == "male") %>% 
+  pivot_longer(cols = c(resids, resids2), names_to = "resids_type")
+ggplot(trim_dat) +
+  geom_point(aes(x = year_f, y = value, fill = period), shape = 21) +
+  facet_grid(resids_type ~ age_f) +
+  ggsidekick::theme_sleek()
+
+
 
 
 # COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
@@ -469,7 +485,7 @@ samp_day <- dat %>%
 
 new_dat4 <- expand.grid(
   age = unique(dat$age),
-  sex = "female",
+  sex = unique(dat$sex),
   # yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -501,23 +517,55 @@ smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 
 # calculate prediction interval
 # (from https://rpubs.com/aaronsc32/regression-confidence-prediction-intervals)
-y.fit <- predict(fit, re_form = NA)
-n <- length(fit$data$fl_cm)
+# y.fit <- predict(fit_gam, re_form = NA)
+# n <- length(dat$fl_cm)
+# 
+# # sse <- sum((dat$fl_cm - y.fit$est)^2)
+# sse <- sum((dat$fl_cm - y.fit)^2)
+# mse <- sse / (n - 2)
+# 
+# t.val <- qt(0.975, n - 2) # Critical value of t
+# 
+# pred.x <- smooth_fit_per$year
+# pred.y <- smooth_fit_per$est
+# 
+# pred.se.fit <- (1 + (1 / n) + (pred.x - mean(dat$year))^2 / (sum((dat$year - mean(dat$year))^2))) # Standard error of the prediction
+# 
+# smooth_fit_per$pred_up <- pred.y + t.val * sqrt(mse * pred.se.fit)
+# smooth_fit_per$pred_low <- pred.y - t.val * sqrt(mse * pred.se.fit)
 
-sse <- sum((fit$data$fl_cm - y.fit$est)^2)
-mse <- sse / (n - 2)
 
-t.val <- qt(0.975, n - 2) # Critical value of t
+## Simulate predictions based on estimated parameters
+# 1) generate model matrix based on predictors and formula
+# 2) draw parameter values based on estimated values (and MVN dist)
+# 3) generate new predictions (excluding residual variability)
+# 4) add random deviates based on sigma
+# https://fromthebottomoftheheap.net/2014/06/16/simultaneous-confidence-intervals-for-derivatives/
+sim_dat <- sdmTMB_simulate(
+  formula = ~ 1 + a1,
+  data = predictor_dat,
+  time = "year",
+  mesh = mesh,
+  family = gaussian(),
+  range = 0.5,
+  sigma_E = 0.1,
+  phi = 0.1,
+  sigma_O = 0.2,
+  seed = 42,
+  B = c(0.2, -0.4) # B0 = intercept, B1 = a1 slope
+)
 
-pred.x <- smooth_fit_per$year
-pred.y <- smooth_fit_per$est
+sim_pred <- simulate(fit, data = new_dat4, nsim = 500)
 
-mean.se.fit <- (1 / n + (pred.x - mean(fit$data$year))^2 / (sum((fit$data$year - mean(fit$data$year))^2))) # Standard error of the mean estimate
-pred.se.fit <- (1 + (1 / n) + (pred.x - mean(fit$data$year))^2 / (sum((fit$data$year - mean(dat$year))^2))) # Standard error of the prediction
-
-smooth_fit_per$pred_up <- pred.y + t.val * sqrt(mse * pred.se.fit)
-smooth_fit_per$pred_low <- pred.y - t.val * sqrt(mse * pred.se.fit)
-
+sim_pred <- sdmTMB_simulate(
+  formula = ~ 0 + s(yday_c, by = age, m = 2, k = 6) + 
+    s(year, by = age, m = 2, k = 6) + period + age + sex,
+  data = new_dat4 %>% filter(period == "Gilbert-Clemens"),
+  family = gaussian(),
+  phi = 0.9678908,
+  seed = 42,
+  B = fit$sd_report[ , "Estimate"]
+)
 
 # include average predictions for context
 dat_avg_trim <- dat_avg %>% 
