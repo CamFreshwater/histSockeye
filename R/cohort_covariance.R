@@ -8,8 +8,9 @@ library(ggcorrplot)
 
 
 # posterior predictions from brms_fit
-post <- readRDS(
-  here::here("outputs", "data", "brms_fits", "brms_post_preds.rds")) 
+# post <- readRDS(
+#   here::here("outputs", "data", "brms_fits", "brms_post_preds.rds")) 
+post <- readRDS(here::here("outputs", "data", "tmb_post_preds.rds"))
 
 
 # year means
@@ -60,7 +61,7 @@ dat_avg2 <- left_join(dat_avg,
                         select(ret_year = year,
                                age,
                                sex,
-                               median_est = median) %>% 
+                               median_est = sim_obs) %>% 
                         distinct(),
                       by = c("age", "sex", "ret_year"))
 levels(dat_avg2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
@@ -76,23 +77,21 @@ corr_foo <- function(data, sex_in = "male", year_class, data_class,
     select({{ year_class }}, age_f, {{ data_class }}) %>% 
     pivot_wider(names_from = age_f, 
                 values_from = {{ data_class }}) %>%
-    drop_na() %>% 
+    # drop_na() %>% 
     select(-{{ year_class }}) %>% 
-    cor(.) 
+    cor(., use = "complete.obs") 
 
-  return(dum)
-    
-  # ggcorrplot(dum, hc.order = TRUE, type = "lower",
-  #            lab = TRUE, title = title) 
+  ggcorrplot::ggcorrplot(dum, hc.order = TRUE, type = "lower",
+             lab = TRUE, title = title)
 }
 
 
 dat_avg2 %>% 
   filter(sex == sex_in) %>% 
   select({{ year_class }}, age_f, {{ data_class }})
-pivot_wider(names_from = age_f, 
+  pivot_wider(names_from = age_f, 
             values_from = {{ data_class }}) %>%
-  drop_na() %>% 
+  # drop_na() %>% 
   select(-{{ year_class }}) %>% 
   cor(.) 
 
@@ -102,30 +101,5 @@ corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean,
          title = "Return Year")
 corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean,
          title = "Brood Year")
-corr_foo(dat_avg2, year_class = entry_year, data_class = obs_mean,
-         title = "Entry Year")
 dev.off()
 
-corr_foo(dat_avg2, year_class = ret_year, data_class = median_est)
-corr_foo(dat_avg2, year_class = brood_year, data_class = median_est)
-corr_foo(dat_avg2, year_class = entry_year, data_class = median_est)
-
-
-dum1 <- dat_avg2 %>% 
-  filter(sex == "male",
-         age_f %in% c("4[2]", "5[3]")) %>%
-  select(ret_year, age_f, obs_mean) %>% 
-  pivot_wider(names_from = age_f, 
-              values_from = obs_mean) %>%
-  drop_na() %>% 
-  select(-ret_year) %>% 
-  cor(.)
-dum2 <- dat_avg2 %>% 
-  filter(sex == "male",
-         age_f %in% c("4[2]", "5[3]")) %>%
-  select(entry_year, age_f, obs_mean) %>% 
-  pivot_wider(names_from = age_f, 
-              values_from = obs_mean) %>%
-  drop_na() %>% 
-  select(-entry_year) %>%
-  cor(.)
