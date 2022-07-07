@@ -103,3 +103,7 @@ corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean,
          title = "Brood Year")
 dev.off()
 
+corr_foo(dat_avg2, year_class = ret_year, data_class = median_est,
+         title = "Return Year")
+corr_foo(dat_avg2, year_class = brood_year, data_class = median_est,
+         title = "Brood Year")

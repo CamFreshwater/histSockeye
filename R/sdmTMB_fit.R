@@ -201,8 +201,8 @@ dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 6) +
-                s(year, by = age, m = 2, k = 6) +
+fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
+                s(year, by = age, m = 2) +
                 period + age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -236,6 +236,22 @@ ggplot(trim_dat) +
 
 
 # COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
+
+# NOTE this comparison was made with identical constraints (k cannot be greater 
+# than 5 without leading to convergence issues for global smooth model)
+
+# fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2, k = 5) +
+#                 s(year, by = age, m = 2, k = 5) +
+#                 period + age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
 
 # fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
 #                 s(yday_c, by = age, m = 1, k = 5) +
@@ -399,7 +415,7 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
     expand = c(0.02, 0.02)
   )
 
-png(here::here("outputs", "figs", "smooth_means_no_global.png"), 
+png(here::here("outputs", "figs", "smooth_means_no_global_unconstrainedk.png"), 
     height = 5, width = 8.5,
     units = "in", res = 250)
 smooth_year
@@ -503,13 +519,15 @@ new_dat4 <- expand.grid(
                          "Monkley Dump",
                          "Nisga'a"),
     age_f = as.factor(age)
-    )
-  # left_join(., period_sig, by = "period") %>% 
+    ) #%>% 
+  # left_join(., period_sig, by = "period") 
 levels(new_dat4$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 # new_dat4 <- left_join(new_dat4, samp_day, by = c("period", "age_f"))
 
-smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 
+## ORIGINAL PREDICTION INTERVALS (DEFUNCT)
+
+# smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 
 # calculate prediction interval
 # (from https://rpubs.com/aaronsc32/regression-confidence-prediction-intervals)
@@ -538,6 +556,7 @@ smooth_fit_per <- predict(fit, newdata = new_dat4, re_form = NA)
 # 4) add random deviates based on sigma
 # https://fromthebottomoftheheap.net/2014/06/16/simultaneous-confidence-intervals-for-derivatives/
 
+
 source(here::here("R", "utils.R"))
 
 ## generate inputs for simulation (functions saved in utils.R; from sdmTMB)
@@ -561,6 +580,7 @@ coef_list <- as.list(fit$sd_report, "Estimate")
 coef_vec <- c(coef_list$b_j, coef_list$b_disp_k, coef_list$bs, 
               coef_list$ln_smooth_sigma)
 
+set.seed(1234)
 n_sims <- 1000
 cov_sim <- MASS::mvrnorm(n_sims, coef_vec, cov)
 b1_j <- cov_sim[ , grep("b_j", colnames(cov))] #fixed effect pars
@@ -633,17 +653,19 @@ sim_dat <- sim_list %>%
     .groups = "drop"
   ) 
 
-sim_list %>% 
-  bind_rows %>% 
-  filter(
-    sex == "female",
-    iter %in% seq(1, 10, by = 1)
-  ) %>% 
-  ggplot(., 
-         aes(x = year)) +
-  geom_line(aes(y = sim_obs, colour = as.factor(iter))) +
-  facet_wrap(~age_f)
-  glimpse()
+saveRDS(sim_dat, here::here("outputs", "data", "tmb_post_preds.rds"))
+
+# sim_list %>% 
+#   bind_rows %>% 
+#   filter(
+#     sex == "female",
+#     iter %in% seq(1, 10, by = 1)
+#   ) %>% 
+#   ggplot(., 
+#          aes(x = year)) +
+#   geom_line(aes(y = sim_obs, colour = as.factor(iter))) +
+#   facet_wrap(~age_f)
+#   glimpse()
 
 # include average predictions for context
 dat_avg_trim <- dat_avg %>% 
@@ -658,20 +680,20 @@ dat_avg_trim <- dat_avg %>%
   )
   
 # join with random subsample of predictions
-point_dat <- dat %>% 
-  mutate(dataset = "individual measurements") %>% 
-  filter(sex == "female") %>% 
-  select(colnames(dat_avg_trim)) %>% 
-  sample_n(1000) %>% 
-  rbind(., dat_avg_trim) 
+# point_dat <- dat %>% 
+#   mutate(dataset = "individual measurements") %>% 
+#   filter(sex == "female") %>% 
+#   select(colnames(dat_avg_trim)) %>% 
+#   sample_n(1000) %>% 
+#   rbind(., dat_avg_trim) 
 
 smooth_year_per <- ggplot(sim_dat %>% filter(sex == "female"), 
        aes(x = year)) +
   geom_line(aes(y = sim_obs)) +
   geom_ribbon(aes(ymin = low_sim_obs, ymax = up_sim_obs), alpha = 0.3) +
-  # geom_point(data = point_dat,
-  #            aes(y = fl_cm, shape = period, fill = dataset)) +
-  # scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
+  geom_point(data = dat_avg_trim,
+             aes(y = fl_cm, shape = period), fill = "red") +
+  scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
   # scale_fill_manual(values = fill_pal, name = "Dataset") +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
