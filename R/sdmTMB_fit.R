@@ -501,7 +501,7 @@ new_dat4 <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),
   yday_c = 0,
-  year = seq(min(dat$year), max(dat$year), length = 100),
+  year = seq(min(dat$year), max(dat$year), by = 1),
   # dummy spatial variables required 
   x = runif(1),
   y = runif(1)
