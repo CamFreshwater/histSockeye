@@ -773,59 +773,77 @@ fec_dat <- expand.grid(
   )
 levels(fec_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
-
-# simulate differences in fecundity assuming sigma equal to estimate for Nisga'a
-# sampling period
-fec_preds <- predict(fit, newdata = fec_dat, re_form = NA)
-nsims <- 1000
-ndfw_sigma <- 1.335
-# Mason and West regression for Fulton River
-b1 = 11.52 #11.10 (Pinkut Creek) 
-a1 = -2152 #2015.8 (Pinkut Creek)
-# sigma = 14.9 #19.5 labelled as s_yx in text, not sure if this is SD or something else...
-
-sim_list <- vector(mode = "list", length = nsims)
+# components for calculating smooths
+pred_X_ij_fec <- predict(mgcv::gam(formula_no_sm, data = dat), 
+                     fec_dat, type = "lpmatrix")
+sm_pred <- parse_smoothers(fit$formula[[1]], data = dat, 
+                           newdata = fec_dat)
+pred_X1_ij_fec = pred_X_ij_fec
+pred_Zs_fec = sm_pred$Zs
+pred_Xs_fec = sm_pred$Xs
 
 
-set.seed(1234)
+# simulate as above but assuming sigma in both years equal to NFWD value and
+# include calculations; uses same coefficient samples as prediction intervals
+# above
+sim_list_fec <- vector(mode = "list", length = n_sims)
 
-for (i in 1:nsims) {
-  sim_fl <- fec_preds$est + rnorm(nrow(fec_preds), 0, ndfw_sigma)
-  # convert to POH length in mm using inverse of equation in main manuscript
-  sim_hl <-  (0.833 * sim_fl * 10) - 3.508
-  # convert to fecundity (1000s) using west and mason regression pars
-  sim_list[[i]] <- data.frame( 
-    iter = i,
-    age  = fec_preds$age,
-    year = fec_preds$year,
-    sim_fec = (b1 * sim_hl + a1) / 1000
+for (i in seq_len(n_sims)) {
+  pred_mu1 <- pred_X1_ij_fec %*% b1_j[i, ]
+  
+  pred_smooth <- matrix(NA, nrow(pred_X1_ij_fec), length(sm_start))
+  
+  for (ss in seq_along(sm_start)) {
+    beta_ss <- rep(NA, times = ncol(pred_Zs_fec[[ss]]))
+    for (j in seq_along(beta_ss)) {
+      beta_ss[j] <- b_smooth[sm_start[ss] + j]
+    }
+    pred_smooth[ , ss] <- pred_Zs_fec[[ss]] %*% beta_ss
+  }
+  
+  pred_smooth1_i <- apply(pred_smooth, 1, sum)
+  pred_smooth2_i <- pred_Xs_fec %*% bs[i, ]
+  pred_smooth_i <- pred_smooth1_i + pred_smooth2_i
+  pred_mu_i <- pred_mu1 + pred_smooth_i
+  
+  sim_list_fec[[i]] <- fec_dat %>% 
+    mutate(
+      iter = i,
+      pred_mu = as.numeric(pred_mu_i)
     ) %>% 
-    group_by(age) %>% 
+    left_join(
+      ., sigma_dat, by = c("iter", "period")
+    ) %>% 
+    mutate(
+      # convert to POH length in mm using inverse of equation in main manuscript
+      sim_hl =  (0.833 * pred_mu * 10) - 3.508,
+      sim_fec = (b1 * sim_hl + a1) / 1000
+    ) %>% 
+    group_by(age) %>%
     mutate(
       mean_sim_fec = mean(sim_fec)
     ) %>% 
     filter(
       year %in% c(min(dat$year), max(dat$year))
     ) %>% 
+    select(year, age, age_f, iter, sim_fec, mean_sim_fec) %>% 
     pivot_wider(names_from = "year", values_from = "sim_fec") %>% 
     mutate(diff = `2019` - `1914`,
-           rel_diff = diff / mean_sim_fec)
-}
-sim_dat <- data.table::rbindlist(sim_list) %>% 
-  mutate(age_f = as.factor(age)) %>% 
+           rel_diff = diff / mean_sim_fec) 
+  }
+
+sim_dat_fec <- data.table::rbindlist(sim_list) %>% 
   as.data.frame()
-levels(sim_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
-
-diff_fecundity <- sim_dat %>% 
+diff_fecundity <- sim_dat_fec %>% 
   group_by(age_f) %>% 
   summarize(
-    median = median(diff),
-    low = quantile(diff, probs = 0.05),
-    up = quantile(diff, probs = 0.95),
-    rel_median = median(rel_diff),
-    rel_low = quantile(rel_diff, probs = 0.05),
-    rel_up = quantile(rel_diff, probs = 0.95),
+    mean = mean(diff),
+    low = quantile(diff, probs = 0.025),
+    up = quantile(diff, probs = 0.975),
+    rel_mean = mean(rel_diff),
+    rel_low = quantile(rel_diff, probs = 0.025),
+    rel_up = quantile(rel_diff, probs = 0.975),
     .groups = "drop"
   ) 
 
@@ -833,7 +851,7 @@ diff_fecundity <- sim_dat %>%
 png(here::here("outputs", "figs", "fecundity_diff.png"), 
     height = 4, width = 5, units = "in", res = 250)
 ggplot(diff_fecundity) +
-  geom_pointrange(aes(x = age_f, y = rel_median, ymin = rel_low, 
+  geom_pointrange(aes(x = age_f, y = rel_mean, ymin = rel_low, 
                       ymax = rel_up)) +
   geom_hline(aes(yintercept = 0), lty = 2) +
   ggsidekick::theme_sleek() +
