@@ -86,22 +86,20 @@ corr_foo <- function(data, sex_in = "male", year_class, data_class,
 }
 
 
-dat_avg2 %>% 
-  filter(sex == sex_in) %>% 
-  select({{ year_class }}, age_f, {{ data_class }})
-  pivot_wider(names_from = age_f, 
-            values_from = {{ data_class }}) %>%
-  # drop_na() %>% 
-  select(-{{ year_class }}) %>% 
-  cor(.) 
 
-
-pdf(here::here("outputs", "figs", "cor_plot.pdf"))
-corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean,
-         title = "Return Year")
-corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean,
-         title = "Brood Year")
+return_corr <- corr_foo(dat_avg2, year_class = ret_year, data_class = obs_mean,
+                        title = "Return Year")
+brood_corr <- corr_foo(dat_avg2, year_class = brood_year, data_class = obs_mean,
+                       title = "Brood Year")
+  
+  
+png(here::here("outputs", "figs", "cor_plot.png"), height = 4, width = 7.5,
+    res = 250, units = "in")
+cowplot::plot_grid(return_corr,
+                   brood_corr,
+                   ncol = 2)
 dev.off()
+
 
 corr_foo(dat_avg2, year_class = ret_year, data_class = median_est,
          title = "Return Year")

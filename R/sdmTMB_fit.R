@@ -386,7 +386,7 @@ dev.off()
 new_dat2 <- expand.grid(
   age = unique(dat$age),
   sex = "female",
-  period = "Bilton",
+  period = "Gilbert-Clemens",
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -680,12 +680,12 @@ dat_avg_trim <- dat_avg %>%
   )
   
 # join with random subsample of predictions
-# point_dat <- dat %>% 
-#   mutate(dataset = "individual measurements") %>% 
-#   filter(sex == "female") %>% 
-#   select(colnames(dat_avg_trim)) %>% 
-#   sample_n(1000) %>% 
-#   rbind(., dat_avg_trim) 
+point_dat <- dat %>%
+  mutate(dataset = "individual measurements") %>%
+  filter(sex == "female") %>%
+  select(colnames(dat_avg_trim)) %>%
+  sample_n(1000) %>%
+  rbind(., dat_avg_trim)
 
 smooth_year_per <- ggplot(sim_dat %>% filter(sex == "female"), 
        aes(x = year)) +
@@ -693,8 +693,10 @@ smooth_year_per <- ggplot(sim_dat %>% filter(sex == "female"),
   geom_ribbon(aes(ymin = low_sim_obs, ymax = up_sim_obs), alpha = 0.3) +
   geom_point(data = dat_avg_trim,
              aes(y = fl_cm, shape = period), fill = "red") +
+  # geom_point(data = point_dat,
+  #            aes(y = fl_cm, shape = period, fill = dataset)) +
   scale_shape_manual(values = shape_pal, name = "Sampling\nPeriod") +
-  # scale_fill_manual(values = fill_pal, name = "Dataset") +
+  scale_fill_manual(values = fill_pal, name = "Dataset") +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (cm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
@@ -716,7 +718,7 @@ dev.off()
 # time series for each age; control and don't control for period effects
 
 smooth_list <- split(smooth_preds, smooth_preds$age_f) 
-smooth_period_list <- split(smooth_fit_per, smooth_fit_per$age_f) 
+smooth_period_list <- split(sim_dat, sim_dat$age_f) 
 age_names <- c("53", "52", "42", "63")
 
 purrr::map2(smooth_list, age_names, function (x, y) {
@@ -740,12 +742,14 @@ purrr::map2(smooth_list, age_names, function (x, y) {
   bind_rows
 
 purrr::map2(smooth_period_list, age_names, function (x, y) {
-  ts <- x$est
+  ts <- x$pred_mu
   #calc time series mean for each iteration
   ts_mean = mean(ts)
   data.frame(
     mean_diff = ts[length(ts)] - ts_mean,
     first_diff = ts[length(ts)] - ts[1],
+    mean_rel_diff = (ts[length(ts)] - ts_mean) / ts_mean,
+    first_rel_diff = (ts[length(ts)] - ts[1]) / ts[1],
     age = y
   )
 }) %>% 
@@ -841,6 +845,7 @@ ggplot(diff_fecundity) +
   ) +
   scale_y_continuous(
     "Percent Decline in Fecundity (2019-1914)",
+    breaks = c(-0.3, -0.2, -0.1, 0.0),
     labels = c("-30%", "-20%", "-10%", "0%")
   ) +
   theme(legend.position = "none")
