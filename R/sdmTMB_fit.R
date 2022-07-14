@@ -162,12 +162,21 @@ annual_dot <- ggplot(
   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 
-# annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
-#   geom_point(aes(y = sd_fl, fill = period), shape = 21) +
-#   facet_grid(~age) +
-#   ggsidekick::theme_sleek() +
-#   labs(x = "Year", y = "SD Fork Length") +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+## sample sizes through time
+dat %>% 
+  group_by(year, age) %>% 
+  tally() %>% 
+  ggplot(., aes(x = year, y = n)) +
+  geom_point() +
+  facet_wrap(~age)
+  glimpse()
+
+annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = sd_fl, fill = period), shape = 21) +
+  facet_grid(~age) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "SD Fork Length") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 # ggplot(mean_dat, aes(x = year_f)) +
 #   geom_point(aes(y = mean_yday, fill = period), shape = 21) +
 #   facet_wrap(~age) +
@@ -213,7 +222,6 @@ fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
                 nlminb_loops = 2,
                 newton_loops = 2
               ))
-
 
 
 # check residuals
@@ -460,7 +468,7 @@ new_dat3 <- expand.grid(
   mutate(
     age_f = as.factor(age)
   )
-levels(new_dat2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+levels(new_dat3$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
 smooth_preds2 <- predict(fit, newdata = new_dat3, re_form = NA, se_fit = TRUE)
