@@ -222,6 +222,18 @@ fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
                 nlminb_loops = 2,
                 newton_loops = 2
               ))
+fit_int <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
+                s(year, by = age, m = 2) +
+                period + age + sex,
+              dispformula = ~ period,
+              data = dat,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 2
+              ))
 
 
 # check residuals
@@ -261,7 +273,7 @@ ggplot(trim_dat) +
 #                 newton_loops = 2
 #               ))
 
-# fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) + 
+# fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) +
 #                 s(yday_c, by = age, m = 1, k = 5) +
 #                 s(year, m = 2, k = 5) +
 #                 s(year, by = age, m = 1, k = 5) +
@@ -311,13 +323,13 @@ new_dat <- expand.grid(
 levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
-fe_preds <- predict(fit, newdata = new_dat, re_form = NA, se_fit = TRUE)
+fe_preds <- predict(fit2, newdata = new_dat, re_form = NA, se_fit = TRUE)
 fe_preds$low <- fe_preds$est + (qnorm(0.025) * fe_preds$est_se)
 fe_preds$up <- fe_preds$est + (qnorm(0.975) * fe_preds$est_se)
 
 period_eff_dot <- fe_preds %>% 
   filter(age == "42",
-         sex == "male") %>% 
+         sex == "female") %>% 
   ggplot(.) +
   geom_pointrange(aes(x = period, y = est, shape = period, 
                       ymin = low, ymax = up),
@@ -386,6 +398,21 @@ cowplot::plot_grid(period_eff_dot,
                    sex_eff_dot,
                    period_sig_dot, ncol = 2)
 dev.off()
+
+
+# EFFECT SIZES -----------------------------------------------------------------
+
+# alternative to above that plots raw effect sizes
+effs <- tidy(fit_int, effects = "fixed") %>% 
+  mutate(low = estimate + (qnorm(0.025) * std.error),
+         up = estimate + (qnorm(0.975) * std.error)
+  )
+
+tidy(fit, effects = "fixed")
+
+ggplot(effs %>% filter(!term == "(Intercept)")) +
+  geom_pointrange(aes(x = term, y = estimate, ymin = low, ymax = up)) +
+  geom_hline(aes(yintercept = 0), lty = 2)
 
 
 # SMOOTH PREDICTIONS  ----------------------------------------------------------
