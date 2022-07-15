@@ -255,6 +255,8 @@ ggplot(trim_dat) +
   ggsidekick::theme_sleek()
 
 
+
+
 # COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
 
 # NOTE this comparison was made with identical constraints (k cannot be greater 
@@ -323,7 +325,7 @@ new_dat <- expand.grid(
 levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
-fe_preds <- predict(fit2, newdata = new_dat, re_form = NA, se_fit = TRUE)
+fe_preds <- predict(fit, newdata = new_dat, re_form = NA, se_fit = TRUE)
 fe_preds$low <- fe_preds$est + (qnorm(0.025) * fe_preds$est_se)
 fe_preds$up <- fe_preds$est + (qnorm(0.975) * fe_preds$est_se)
 
