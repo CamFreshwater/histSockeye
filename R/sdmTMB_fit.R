@@ -222,6 +222,8 @@ fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
                 nlminb_loops = 2,
                 newton_loops = 2
               ))
+
+
 fit_int <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
                 period + age + sex,
@@ -306,6 +308,36 @@ ggplot(trim_dat) +
 # Metrics::rmse(group_pred$est, dat_avg$fl_cm)
 # group specific smooths have better predictions
 
+
+# COMPARE MODEL COMPLEXITY -----------------------------------------------------
+
+# fit_no_period1 <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
+#                 s(year, by = age, m = 2) +
+#                 age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
+# fit_no_period2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
+#                            s(year, by = age, m = 2) +
+#                            age + sex,
+#                          # dispformula = ~ 0 + period,
+#                          data = dat,
+#                          mesh = dum_mesh,
+#                          spatial = "off",
+#                          spatiotemporal = "off",
+#                          control = sdmTMBcontrol(
+#                            nlminb_loops = 2,
+#                            newton_loops = 2
+#                          ))
+# 
+# AIC(fit, fit_no_period1, fit_no_period2)
+# strong support for including period effect
 
 # CATEGORICAL PREDICTIONS  -----------------------------------------------------
 
