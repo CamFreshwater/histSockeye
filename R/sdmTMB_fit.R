@@ -50,11 +50,16 @@ dat <- dat_in %>%
                          "Monkley Dump",
                          "Nisga'a"),
     fl_cm = fl / 10,
-    # add random identifier to split datasets for subsetting,
-    data_group = sample.int(4, nrow(.), replace = T)
+    # add dummy variables for sampling period
+    period_b = ifelse(period == "Bilton", 1, 0),
+    period_m = ifelse(period == "Monkley Dump", 1, 0),
+    period_n = ifelse(period == "Nisga'a", 1, 0)
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+dat$period_b_cent <- dat$period_b - mean(dat$period_b)
+dat$period_m_cent <- dat$period_m - mean(dat$period_m)
+dat$period_n_cent <- dat$period_n - mean(dat$period_n)
 
 
 # palettes for raw data and model predictions
@@ -177,17 +182,17 @@ annual_sd_dot <- ggplot(mean_dat, aes(x = year_f)) +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "SD Fork Length") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-# ggplot(mean_dat, aes(x = year_f)) +
-#   geom_point(aes(y = mean_yday, fill = period), shape = 21) +
-#   facet_wrap(~age) +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = mean_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 # 
-# ggplot(mean_dat, aes(x = year_f)) +
-#   geom_point(aes(y = sd_yday, fill = period), shape = 21) +
-#   facet_wrap(~age) +
-#   ggsidekick::theme_sleek() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ggplot(mean_dat, aes(x = year_f)) +
+  geom_point(aes(y = sd_yday, fill = period), shape = 21) +
+  facet_wrap(~age) +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 # export
 png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
@@ -203,16 +208,28 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-# dat_trim <- dat %>% sample_n(30000)
 
-# make fake mesh
+# make fake mesh (necessary in current branch)
 dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
+# fit_uncent <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
+#                 s(year, by = age, m = 2) +
+#                 period + age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
+
 fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
-                period + age + sex,
+                period_b_cent + period_m_cent + period_n_cent + age + sex,
               dispformula = ~ 0 + period,
               data = dat,
               mesh = dum_mesh,
@@ -223,38 +240,43 @@ fit <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
                 newton_loops = 2
               ))
 
-
-fit_int <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-                s(year, by = age, m = 2) +
-                period + age + sex,
-              dispformula = ~ period,
-              data = dat,
-              mesh = dum_mesh,
-              spatial = "off",
-              spatiotemporal = "off",
-              control = sdmTMBcontrol(
-                nlminb_loops = 2,
-                newton_loops = 2
-              ))
+# fit_int <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
+#                 s(year, by = age, m = 2) +
+#                 period + age + sex,
+#               dispformula = ~ period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
 
 
 # check residuals
 sims <- simulate(fit, nsim = 500)
-sims %>% 
+dharma_sims <- sims %>% 
   dharma_residuals(fit)
 # looks good
 
+mean_pred <- apply(sims, 1, mean)
+sd_pred <- apply(sims, 1, sd)
 
-dat$resids <- resid(fit, type = "response")
-dat$resids2 <- resid(fit_gam, type = "response")
+
+dat$response_resid <- (mean_pred - dat$fl_cm)
+dat$pearson_resid <- (mean_pred - dat$fl_cm) / sd_pred
 trim_dat <- dat %>% 
-  sample_n(30000) %>% 
+  sample_n(30000) %>%
   filter(sex == "male") %>% 
-  pivot_longer(cols = c(resids, resids2), names_to = "resids_type")
+  pivot_longer(cols = c(response_resid, pearson_resid), 
+               names_to = "resids_type")
 ggplot(trim_dat) +
-  geom_point(aes(x = year_f, y = value, fill = period), shape = 21) +
-  facet_grid(resids_type ~ age_f) +
+  geom_point(aes(x = year_f, y = value, fill = period), shape = 21, alpha = 0.3) +
+  # geom_boxplot(aes(x = year_f, y = value, fill = period), alpha = 0.3) +
+  facet_grid(resids_type ~ age_f, scales = "free_y") +
   ggsidekick::theme_sleek()
+
 
 
 
@@ -338,6 +360,91 @@ ggplot(trim_dat) +
 # 
 # AIC(fit, fit_no_period1, fit_no_period2)
 # strong support for including period effect
+
+
+# DUMMY VARIABLE EFFECTS -------------------------------------------------------
+# smoothed predictions with GAM (just to check)
+# fit_gam <- mgcv::gam(fl_cm ~ 0  +  s(year, by = age, m = 2) + period +
+#                        age + sex,
+#                      data = dat)
+# fit_gamc <- mgcv::gam(fl_cm ~ 0  +  s(year, by = age, m = 2) + 
+#                        period_b_cent + period_m_cent + period_n_cent +
+#                        age + sex,
+#                      data = dat)
+fit_lm <- lm(fl_cm ~ year*age + period + age + sex,
+             data = dat)
+fit_lm_c <- lm(fl_cm ~ year*age +  period_b_cent + period_m_cent + period_n_cent
+              + age + sex,
+             data = dat)
+
+new_dat <- expand.grid(
+  age = unique(dat$age),
+  sex = "female",
+  period = "Gilbert-Clemens",
+  period_b_cent = 0,
+  period_m_cent = 0,
+  period_n_cent = 0,
+  yday_c = 0,
+  year = seq(min(dat$year), max(dat$year), length = 100),
+  # dummy spatial variables required 
+  x = runif(1),
+  y = runif(1)
+) %>% 
+  mutate(
+    age_f = as.factor(age)
+  )
+levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
+
+
+smooth_preds_lm <- new_dat
+smooth_preds_lm_vec <- predict(fit_lm, newdata = new_dat, se.fit = TRUE)
+smooth_preds_lm$est <- smooth_preds_lm_vec$fit
+smooth_preds_lm$low <- smooth_preds_lm_vec$fit + (qnorm(0.025) * smooth_preds_lm_vec$se.fit) %>% as.numeric()
+smooth_preds_lm$up <- smooth_preds_lm_vec$fit + (qnorm(0.975) * smooth_preds_lm_vec$se.fit) %>% as.numeric()
+
+smooth_preds_lmc <- new_dat
+smooth_preds_lmc_vec <- predict(fit_lm_c, newdata = new_dat, se.fit = TRUE)
+smooth_preds_lmc$est <- smooth_preds_lmc_vec$fit
+smooth_preds_lmc$low <- smooth_preds_lmc_vec$fit + (qnorm(0.025) * smooth_preds_lmc_vec$se.fit) %>% as.numeric()
+smooth_preds_lmc$up <- smooth_preds_lmc_vec$fit + (qnorm(0.975) * smooth_preds_lmc_vec$se.fit) %>% as.numeric()
+
+smooth_preds_dum <- rbind(smooth_preds_lmc %>% mutate(model = "centered"), 
+                          smooth_preds_lm %>% mutate(model = "uncentered")) 
+
+pdf(here::here("outputs", "figs", "lm_gam_preds.pdf"))
+ggplot() +
+  geom_line(data = smooth_preds_dum, 
+            aes(x = year, y = est, colour = model)) +
+  geom_ribbon(data = smooth_preds_dum, 
+              aes(x = year, y = est, ymin = low, ymax = up,
+                  colour = model, fill = model), alpha = 0.4) +
+  # geom_point(data = dum_points, aes(x = year, y = mean_fl / 10)) +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (cm)") +
+  facet_wrap(~age_f, labeller = label_parsed, scales = "free_y") +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  )
+dev.off()
+
+roll_surv <- surv_iters2 %>% 
+  group_by(iter_chain, year, group) %>% 
+  summarize(mean_value_link = mean(value),
+            mean_value = mean(uncent_real_value),
+            .groups = "drop") %>% 
+  group_by(iter_chain, group) %>% 
+  arrange(iter_chain, year) %>% 
+  mutate(
+    roll_mean = slider::slide_dbl(mean_value, mean, .before = 5),
+    roll_mean_link = slider::slide_dbl(mean_value_link, mean, .before = 5),
+  ) 
+
+
+roll_mean = slider::slide_dbl(dum$mean_fl, sd, .before = 5) 
+glimpse()
+
+
 
 # CATEGORICAL PREDICTIONS  -----------------------------------------------------
 
@@ -455,7 +562,7 @@ ggplot(effs %>% filter(!term == "(Intercept)")) +
 new_dat2 <- expand.grid(
   age = unique(dat$age),
   sex = "female",
-  period = "Gilbert-Clemens",
+  period = "Bilton",
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -491,30 +598,10 @@ smooth_year
 dev.off()
 
 
-# smoothed predictions with GAM (just to check)
-# fit_gam <- mgcv::gam(fl_cm ~ 0  + s(yday_c, by = age, m = 2, k = 6) +
-#                        s(year, by = age, m = 2, k = 6) +
-#                        period + age + sex,
-#                      data = dat)
-#
-# smooth_preds_gam_vec <- predict(fit_gam, newdata = new_dat2, se.fit = TRUE)
-# smooth_preds_gam <- new_dat2
-# smooth_preds_gam$est <- smooth_preds_gam_vec$fit
-# smooth_preds_gam$low <- smooth_preds_gam_vec$fit + (qnorm(0.025) * smooth_preds_gam_vec$se.fit)
-# smooth_preds_gam$up <- smooth_preds_gam_vec$fit + (qnorm(0.975) * smooth_preds_gam_vec$se.fit)
-# 
-# ggplot(smooth_preds_gam, aes(x = year, y = est)) +
-#   geom_line() +
-#   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
-#   ggsidekick::theme_sleek() +
-#   labs(x = "Year", y = "Fork Length (cm)") +
-#   facet_wrap(~age_f, labeller = label_parsed) +
-#   scale_x_continuous(
-#     breaks = seq(1915, 2015, by = 20),
-#     expand = c(0.02, 0.02)
-#   )
 
-
+  
+  
+  
 # year day effects
 new_dat3 <- expand.grid(
   age = unique(dat$age),
