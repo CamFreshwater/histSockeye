@@ -446,7 +446,7 @@ period_sig_dot <- ggplot(period_sig) +
   labs(x = "Sampling Period", y = "Estimated Residual SD") +
   theme(legend.position = "none")
 
-png(here::here("outputs", "figs", "var_ests.png"), 
+png(here::here("outputs", "figs", "sigma_ests.png"), 
     height = 4, width = 5,
     units = "in", res = 250)
 period_sig_dot
@@ -763,17 +763,6 @@ sim_dat <- sim_list %>%
 
 saveRDS(sim_dat, here::here("outputs", "data", "tmb_post_preds.rds"))
 
-# sim_list %>% 
-#   bind_rows %>% 
-#   filter(
-#     sex == "female",
-#     iter %in% seq(1, 10, by = 1)
-#   ) %>% 
-#   ggplot(., 
-#          aes(x = year)) +
-#   geom_line(aes(y = sim_obs, colour = as.factor(iter))) +
-#   facet_wrap(~age_f)
-#   glimpse()
 
 # include average predictions for context
 dat_avg_trim <- dat_avg %>% 
@@ -785,15 +774,16 @@ dat_avg_trim <- dat_avg %>%
   filter(sex == "female") %>% 
   select(
     year, fl_cm, dataset = data, period, age_f
-  )
-  
+  ) %>% 
+  droplevels()
+
 # join with random subsample of predictions
-point_dat <- dat %>%
-  mutate(dataset = "individual measurements") %>%
-  filter(sex == "female") %>%
-  select(colnames(dat_avg_trim)) %>%
-  sample_n(1000) %>%
-  rbind(., dat_avg_trim)
+# point_dat <- dat %>%
+#   mutate(dataset = "individual measurements") %>%
+#   filter(sex == "female") %>%
+#   select(colnames(dat_avg_trim)) %>%
+#   sample_n(1000) %>%
+#   rbind(., dat_avg_trim)
 
 smooth_year_per <- ggplot(sim_dat %>% filter(sex == "female"), 
        aes(x = year)) +
@@ -833,17 +823,11 @@ purrr::map2(smooth_list, age_names, function (x, y) {
   ts <- x$est
   #calc time series mean for each iteration
   ts_mean = mean(ts)
-  # #difference from mean
-  # diff <- ts[length(ts)] - ts_mean
-  # #difference from first obs
-  # diff2 <- ts[length(ts)] - ts[1]
   data.frame(
     mean_diff = ts[length(ts)] - ts_mean,
     first_diff = ts[length(ts)] - ts[1],
     mean_rel_diff = (ts[length(ts)] - ts_mean) / ts_mean,
     first_rel_diff = (ts[length(ts)] - ts[1]) / ts[1],
-    # low = quantile(diff2, probs = 0.05),
-    # high = quantile(diff2, probs = 0.95),
     age = y
   )
 }) %>% 
@@ -870,6 +854,9 @@ fec_dat <- expand.grid(
   age = unique(dat$age),
   sex = "female",
   period = "Nisga'a",
+  period_b_cent = 0,
+  period_m_cent = 0,
+  period_n_cent = 1,
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), by = 1),
   # dummy spatial variables required 
@@ -925,7 +912,7 @@ for (i in seq_len(n_sims)) {
     mutate(
       # convert to POH length in mm using inverse of equation in main manuscript
       sim_hl =  (0.833 * pred_mu * 10) - 3.508,
-      sim_fec = (b1 * sim_hl + a1) / 1000
+      sim_fec = (11.52 * sim_hl - 2152) / 1000
     ) %>% 
     group_by(age) %>%
     mutate(
@@ -937,10 +924,11 @@ for (i in seq_len(n_sims)) {
     select(year, age, age_f, iter, sim_fec, mean_sim_fec) %>% 
     pivot_wider(names_from = "year", values_from = "sim_fec") %>% 
     mutate(diff = `2019` - `1914`,
-           rel_diff = diff / mean_sim_fec) 
-  }
+           rel_diff = diff / mean_sim_fec) %>% 
+    ungroup()
+}
 
-sim_dat_fec <- data.table::rbindlist(sim_list) %>% 
+sim_dat_fec <- data.table::rbindlist(sim_list_fec) %>% 
   as.data.frame()
 
 diff_fecundity <- sim_dat_fec %>% 
