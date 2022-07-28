@@ -50,7 +50,9 @@ dat <- dat_in %>%
     # predictions)
     period_b = ifelse(period == "Bilton", 1, 0),
     period_m = ifelse(period == "Monkley Dump", 1, 0),
-    period_n = ifelse(period == "Nisga'a", 1, 0)
+    period_n = ifelse(period == "Nisga'a", 1, 0),
+    age_sex = paste(age, sex, sep = "_") %>% 
+      as.factor()
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
@@ -69,21 +71,70 @@ fit2 <- lm(fl_cm ~ year_c,
 fit3 <- lm(fl_cm ~ period_b_cent + period_m_cent + period_n_cent,
            data = trim_dat)
 
-fit_gam <- mgcv::gam(fl_cm ~ #s(yday_c, by = age, m = 2) +
-                s(year) +
-                #period_b_cent + period_m_cent + period_n_cent + 
+fit_gam <- mgcv::gam(fl_cm ~ s(yday_c, by = age_sex, m = 2) +
+                s(year, by = age_sex, m = 2) +
+                period_b_cent + period_m_cent + period_n_cent +
                   age + sex,
               data = dat
               )
-mgcv.helper::vif.gam(fit_gam)
+performance::check_concurvity(fit_gam)
+performance::check_collinearity(fit_gam)
+concurvity(fit_gam)
+
+mean_dat <- dat %>% 
+  group_by(year, age, sex) %>% 
+  mutate(mean_fl = mean(fl_cm), .groups = "drop") %>% 
+  select(year, age, sex, mean_fl, period) %>% 
+  distinct()
+
+fit_gam <- mgcv::gam(mean_fl ~ s(yday_c, by = age) +
+                       s(year, by = age) +
+                       period +
+                       age + sex,
+                     data = mean_dat
+)
+performance::check_concurvity(fit_gam)
+performance::check_collinearity(fit_gam)
+concurvity(fit_gam)
+
 
 trim_dat %>% 
   group_by(period) %>% 
   summarize(mean_fl = mean(fl_cm))
 
 AIC(fit1, fit2, fit3)
-car::vif(fit)
 
+fit1 <- lm(fl_cm ~ year + period_b_cent + period_m_cent + period_n_cent +
+             yday_c + age + sex,
+           data = dat)
+
+
+car::vif(fit1)
+
+
+
+library(mgcv)
+library(dplyr)
+library(mgcv.helper)
+
+set.seed(101)
+
+N <- 100
+x1 <- runif(n=N)
+x2 <- runif(n=N)
+x3 <- runif(n=N) + 0.9*x1 - 1.75*x2
+
+df <- data.frame(x1 = x1,
+                 x2 = x2,
+                 x3 = x3) %>%
+  mutate(y = rnorm(n=N,
+                   mean = 1 - 2*x1 + 3*x2 - 0.5*x3,
+                   sd = 0.5))
+
+fit1 <- gam(data=df, y ~ x1 + x2 + x3)
+
+summary(fit1)
+vif.gam(fit1)
 
 
 
