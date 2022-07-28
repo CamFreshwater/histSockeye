@@ -228,31 +228,6 @@ fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 newton_loops = 2
               ))
 
-# fit_uncent <- sdmTMB(fl_cm ~ 0 + s(yday_c, by = age, m = 2) +
-#                 s(year, by = age, m = 2) +
-#                 period + age + sex,
-#               dispformula = ~ 0 + period,
-#               data = dat,
-#               mesh = dum_mesh,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 nlminb_loops = 2,
-#                 newton_loops = 2
-#               ))
-# fit_int <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-#                 s(year, by = age, m = 2) +
-#                 period + age + sex,
-#               dispformula = ~ period,
-#               data = dat,
-#               mesh = dum_mesh,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 nlminb_loops = 2,
-#                 newton_loops = 2
-#               ))
-
 
 # check residuals
 sims <- simulate(fit, nsim = 500)
