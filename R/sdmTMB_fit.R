@@ -215,9 +215,11 @@ dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-                s(year, by = age, m = 2) +
-                period_b_cent + period_m_cent + period_n_cent + age + sex,
+fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
+                s(year, by = age, m = 2, k = 5) +
+                period +
+                # period_b_cent + period_m_cent + period_n_cent + 
+                age + sex,
               dispformula = ~ 0 + period,
               data = dat,
               mesh = dum_mesh,
@@ -227,6 +229,39 @@ fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 nlminb_loops = 2,
                 newton_loops = 2
               ))
+sanity(fit)
+
+
+fit2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
+                s(year, by = age, m = 2, k = 5) +
+                # period +
+                period_b_cent + period_m_cent + period_n_cent +
+                age + sex,
+              # dispformula = ~ 0 + period,
+              data = dat,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 2
+              ))
+
+
+fit3 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
+                 s(year, by = age, m = 2, k = 5) +
+                 period_b_cent + period_m_cent + period_n_cent +
+                 age + sex,
+               dispformula = ~ 0 + period,
+               data = dat,
+               mesh = dum_mesh,
+               spatial = "off",
+               spatiotemporal = "off",
+               control = sdmTMBcontrol(
+                 nlminb_loops = 2,
+                 newton_loops = 2
+               ))
+
 
 
 # check residuals

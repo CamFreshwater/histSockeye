@@ -1,3 +1,8 @@
+## simulation exploring correlated categorical and continous predictors
+
+
+library(tidyverse)
+
 set.seed(999)
 b0 <- 1.4 # intercept
 b1 <- 0.4 # continuous slope
@@ -6,7 +11,7 @@ b2 <- 1.7 # factor level 1 coefficient
 sigma <- 2.0 # residual standard deviation
 N <- 150 # number of data points
 
-x1 <- runif(N, 0, 20) # continuous predictor data
+x1 <- runif(N, 0, 2000) # continuous predictor data
 x2 <- rbinom(N, size = 1, prob = 0.4) # binary predictor data
 
 dum_dat <- data.frame(
@@ -18,11 +23,13 @@ dum_dat <- data.frame(
     x2f = as.factor(x2)
   ) 
 
-ggplot(dum_dat, aes(x = x1, y = y, colour = as.factor(x2))) +
-  geom_point()
+# ggplot(dum_dat, aes(x = x1, y = y, colour = as.factor(x2))) +
+#   geom_point()
 
 
 m <- lm(y ~ x1 + x2f, data = dum_dat)
+summary(m)
+
 m2 <- lm(y ~ x1 + x2, data = dum_dat)
 
 new_dat <- data.frame(

@@ -60,6 +60,64 @@ dat$period_b_cent <- dat$period_b - mean(dat$period_b)
 dat$period_m_cent <- dat$period_m - mean(dat$period_m)
 dat$period_n_cent <- dat$period_n - mean(dat$period_n)
 
+# original model
+fit_gam <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                s(year, by = age, m = 2) +
+                period +#period_b_cent + period_m_cent + period_n_cent +
+                  age + sex,
+              data = dat
+              )
+performance::check_concurvity(fit_gam)
+performance::check_collinearity(fit_gam)
+dum <- mgcv::concurvity(fit_gam, full = FALSE)
+
+
+# model with residuals
+period_fit <- lm(year ~ period, data = dat)
+dat$per_resids <- resid(period_fit)
+
+
+fit_gam2 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                       s(per_resids, by = age, m = 2) +
+                       period_b_cent + period_m_cent + period_n_cent +
+                       age + sex,
+                     data = dat
+)
+
+
+
+## PERTURB ---------------------------------------------------------------------
+
+fit_gam3 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                       s(year, by = age, m = 2) +
+                       period + #period_b_cent + period_m_cent + period_n_cent +
+                       age + sex,
+                     data = dat
+)
+
+p_gam <- perturb(fit_gam3, pvars = c("year", "yday_c"), prange = c(1, 1),
+                 pfac = list("period", pcnt = 95))
+
+fit1 <- lm(fl_cm ~ year_c + period + yday_c,
+           data = dat)
+p_lm <- perturb(fit1, pvars = c("year_c", "yday_c"), prange = c(1, 1),
+                 pfac = list("period", pcnt = 95))
+
+
+library(perturb)
+library(car)
+data(Duncan)
+m2<-lm(prestige~income+education+type, data=Duncan)
+summary(m2)
+anova(m2)
+vif(m2)
+p2<-perturb(m2,pvars=c("income","education"),prange=c(1,1),
+            pfac=list("type",pcnt=95))
+summary(p2)
+
+
+## EXPLORE ALTERNATIVE STRUCTURES ----------------------------------------------
+
 trim_dat <- dat %>% 
   filter(age == "42", sex == "female") %>% 
   mutate(year_c = year - mean(year))
@@ -71,32 +129,6 @@ fit2 <- lm(fl_cm ~ year_c,
 fit3 <- lm(fl_cm ~ period_b_cent + period_m_cent + period_n_cent,
            data = trim_dat)
 
-fit_gam <- mgcv::gam(fl_cm ~ s(yday_c, by = age_sex, m = 2) +
-                s(year, by = age_sex, m = 2) +
-                period_b_cent + period_m_cent + period_n_cent +
-                  age + sex,
-              data = dat
-              )
-performance::check_concurvity(fit_gam)
-performance::check_collinearity(fit_gam)
-concurvity(fit_gam)
-
-mean_dat <- dat %>% 
-  group_by(year, age, sex) %>% 
-  mutate(mean_fl = mean(fl_cm), .groups = "drop") %>% 
-  select(year, age, sex, mean_fl, period) %>% 
-  distinct()
-
-fit_gam <- mgcv::gam(mean_fl ~ s(yday_c, by = age) +
-                       s(year, by = age) +
-                       period +
-                       age + sex,
-                     data = mean_dat
-)
-performance::check_concurvity(fit_gam)
-performance::check_collinearity(fit_gam)
-concurvity(fit_gam)
-
 
 trim_dat %>% 
   group_by(period) %>% 
@@ -104,38 +136,12 @@ trim_dat %>%
 
 AIC(fit1, fit2, fit3)
 
-fit1 <- lm(fl_cm ~ year + period_b_cent + period_m_cent + period_n_cent +
+fit1 <- lm(fl_cm ~ year + period +#period_b_cent + period_m_cent + period_n_cent +
              yday_c + age + sex,
            data = dat)
 
 
 car::vif(fit1)
-
-
-
-library(mgcv)
-library(dplyr)
-library(mgcv.helper)
-
-set.seed(101)
-
-N <- 100
-x1 <- runif(n=N)
-x2 <- runif(n=N)
-x3 <- runif(n=N) + 0.9*x1 - 1.75*x2
-
-df <- data.frame(x1 = x1,
-                 x2 = x2,
-                 x3 = x3) %>%
-  mutate(y = rnorm(n=N,
-                   mean = 1 - 2*x1 + 3*x2 - 0.5*x3,
-                   sd = 0.5))
-
-fit1 <- gam(data=df, y ~ x1 + x2 + x3)
-
-summary(fit1)
-vif.gam(fit1)
-
 
 
 ## FIT FOR CIs ----------------------------------------------------------------
