@@ -19,12 +19,16 @@ library(ggplot2)
 # rivers2_raw <- st_read(here::here("data", "spatial", "shapefiles",
 #                                   "ne_10m_rivers_north_america.shp"))
 # # secondary rivers shapefile
-lakes_raw <- st_read(here::here("data", "spatial", "shapefiles",
-                                "british_columbia_water.shp"))
-lakes_nass <- lakes_raw %>%
-  #subset to lakes of interest
-  filter(grepl("Meziadin", NAME) | grepl("Bowser", NAME))
-# 
+# lakes_raw <- st_read(here::here("data", "spatial", "shapefiles",
+#                                 "british_columbia_water.shp"))
+# lakes_nass <- lakes_raw %>%
+#   #subset to lakes of interest
+#   filter(grepl("Meziadin", NAME) | grepl("Bowser", NAME))
+
+# Nass shapefile from LGL
+lakes_nass <- st_read(here::here("data", "spatial", "shapefiles",
+                                "FWA_Nass_Sockeye_Streams.shp"))
+
 # # bounding box
 # min_lon <- -133.25
 # min_lat <- 51.5
@@ -46,8 +50,6 @@ lakes_nass <- lakes_raw %>%
 #   #convert to UTM to add buffer
 #   st_transform(., crs = sp::CRS("+proj=utm +zone=10 +units=m"))
 # 
-# 
-# 
 # # save cropped versions
 # saveRDS(coast, here::here("data", "spatial", "trim_coast_sf.rds"))
 # saveRDS(rivers1, here::here("data", "spatial", "trim_rivers1_sf.rds"))
@@ -63,20 +65,6 @@ lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds"))
 rivers <- rbind(rivers1, rivers2[names(rivers1)]) 
 rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin"))
 
-# set attribute-geometry relationship to constant to avoid errors when cropping
-st_agr(rivers) = "constant"
-
-
-combined_plotting <- st_union(
-  coast, 
-  st_buffer(rivers, 400) %>% 
-    st_transform(., crs = sp::CRS("+proj=longlat +datum=WGS84"))
-)
-combined_plotting_sub <- st_union(
-  coast, 
-  st_buffer(rivers_sub, 200) %>% 
-    st_transform(., crs = sp::CRS("+proj=longlat +datum=WGS84"))
-)
 
 
 ## PLOT ------------------------------------------------------------------------
@@ -87,7 +75,7 @@ max_lon <- -126
 max_lat <- 57
 
 ggplot() +
-  geom_sf(data = lakes_raw, color = "black", fill = "white")
+  geom_sf(data = lakes_nass, color = "black", fill = "white")
 
 # main map
 main <- ggplot() +
