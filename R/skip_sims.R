@@ -60,33 +60,27 @@ dat$period_b_cent <- dat$period_b - mean(dat$period_b)
 dat$period_m_cent <- dat$period_m - mean(dat$period_m)
 dat$period_n_cent <- dat$period_n - mean(dat$period_n)
 
-# original model
-fit_gam <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+
+## PERIOD EFFECT ---------------------------------------------------------------
+
+fit1 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
-                period +#period_b_cent + period_m_cent + period_n_cent +
-                  age + sex,
+                period_b_cent + period_m_cent + period_n_cent + age + sex,
               data = dat
               )
-performance::check_concurvity(fit_gam)
-performance::check_collinearity(fit_gam)
-dum <- mgcv::concurvity(fit_gam, full = FALSE)
-
-
-# model with residuals
-period_fit <- lm(year ~ period, data = dat)
-dat$per_resids <- resid(period_fit)
-
-
-fit_gam2 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
-                       s(per_resids, by = age, m = 2) +
-                       period_b_cent + period_m_cent + period_n_cent +
-                       age + sex,
-                     data = dat
+fit2 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                    s(year, by = age, m = 2) +
+                    age + sex,
+                  data = dat
 )
-
+AIC(fit1, fit2)
 
 
 ## PERTURB ---------------------------------------------------------------------
+
+library(perturb)
+library(car)
+
 
 fit_gam3 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
                        s(year, by = age, m = 2) +
@@ -95,25 +89,16 @@ fit_gam3 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
                      data = dat
 )
 
+concur
+
 p_gam <- perturb(fit_gam3, pvars = c("year", "yday_c"), prange = c(1, 1),
                  pfac = list("period", pcnt = 95))
 
-fit1 <- lm(fl_cm ~ year_c + period + yday_c,
+fit1 <- lm(fl_cm ~ year + age + sex + period + yday_c,
            data = dat)
-p_lm <- perturb(fit1, pvars = c("year_c", "yday_c"), prange = c(1, 1),
+p_lm <- perturb(fit1, pvars = c("year"), prange = c(1),
                  pfac = list("period", pcnt = 95))
-
-
-library(perturb)
-library(car)
-data(Duncan)
-m2<-lm(prestige~income+education+type, data=Duncan)
-summary(m2)
-anova(m2)
-vif(m2)
-p2<-perturb(m2,pvars=c("income","education"),prange=c(1,1),
-            pfac=list("type",pcnt=95))
-summary(p2)
+# looks reasonable
 
 
 ## EXPLORE ALTERNATIVE STRUCTURES ----------------------------------------------
@@ -129,19 +114,15 @@ fit2 <- lm(fl_cm ~ year_c,
 fit3 <- lm(fl_cm ~ period_b_cent + period_m_cent + period_n_cent,
            data = trim_dat)
 
+summary(fit1)
+summary(fit2)
+summary(fit3)
 
-trim_dat %>% 
-  group_by(period) %>% 
-  summarize(mean_fl = mean(fl_cm))
 
-AIC(fit1, fit2, fit3)
-
-fit1 <- lm(fl_cm ~ year + period +#period_b_cent + period_m_cent + period_n_cent +
-             yday_c + age + sex,
+fit1 <- lm(fl_cm ~ year + period + yday_c + age + sex,
            data = dat)
-
-
 car::vif(fit1)
+
 
 
 ## FIT FOR CIs ----------------------------------------------------------------
@@ -152,10 +133,9 @@ dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
+fit_year <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
                 period_b_cent + period_m_cent + period_n_cent + age + sex,
-              dispformula = ~ 0 + period,
               data = dat,
               mesh = dum_mesh,
               spatial = "off",
@@ -166,9 +146,7 @@ fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
               ))
 
 fit_no_year <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-                        #s(year, by = age, m = 2) +
                         period_b_cent + period_m_cent + period_n_cent + age + sex,
-                      dispformula = ~ 0 + period,
                       data = dat,
                       mesh = dum_mesh,
                       spatial = "off",
@@ -177,8 +155,8 @@ fit_no_year <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                         nlminb_loops = 2,
                         newton_loops = 2
                       ))
-fit_no_year2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-                         period_b_cent + period_m_cent + period_n_cent + age + sex,
+fit_no_year2 <- sdmTMB(fl_cm ~ period_b_cent + period_m_cent + period_n_cent + 
+                         age + sex,
                        data = dat,
                        mesh = dum_mesh,
                        spatial = "off",
@@ -187,8 +165,7 @@ fit_no_year2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                          nlminb_loops = 2,
                          newton_loops = 2
                        ))
-fit_no_year3 <- sdmTMB(fl_cm ~ #s(yday_c, by = age, m = 2) +
-                         period_b_cent + period_m_cent + period_n_cent + age + sex,
+fit_no_year3 <- sdmTMB(fl_cm ~ period_b_cent + period_m_cent + period_n_cent,
                        data = dat,
                        mesh = dum_mesh,
                        spatial = "off",

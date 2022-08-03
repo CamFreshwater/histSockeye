@@ -209,16 +209,14 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-
 # make fake mesh (necessary in current branch)
 dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
-                s(year, by = age, m = 2, k = 5) +
-                period +
-                # period_b_cent + period_m_cent + period_n_cent + 
+fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
+                s(year, by = age, m = 2) +
+                period_b_cent + period_m_cent + period_n_cent +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -231,41 +229,22 @@ fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
               ))
 sanity(fit)
 
-
-fit2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
-                s(year, by = age, m = 2, k = 5) +
-                # period +
-                period_b_cent + period_m_cent + period_n_cent +
-                age + sex,
-              # dispformula = ~ 0 + period,
-              data = dat,
-              mesh = dum_mesh,
-              spatial = "off",
-              spatiotemporal = "off",
-              control = sdmTMBcontrol(
-                nlminb_loops = 2,
-                newton_loops = 2
-              ))
-
-
-fit3 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 5) +
-                 s(year, by = age, m = 2, k = 5) +
-                 period_b_cent + period_m_cent + period_n_cent +
-                 age + sex,
-               dispformula = ~ 0 + period,
-               data = dat,
-               mesh = dum_mesh,
-               spatial = "off",
-               spatiotemporal = "off",
-               control = sdmTMBcontrol(
-                 nlminb_loops = 2,
-                 newton_loops = 2
-               ))
-
+# fit2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 7) +
+#                 s(year, by = age, m = 2, k = 7) +
+#                 period + age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               mesh = dum_mesh,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 nlminb_loops = 2,
+#                 newton_loops = 2
+#               ))
 
 
 # check residuals
-sims <- simulate(fit, nsim = 500)
+sims <- simulate(fit, nsim = 250)
 dharma_sims <- sims %>% 
   dharma_residuals(fit)
 # looks good
@@ -491,8 +470,7 @@ effs <- tidy(fit, effects = "fixed") %>%
     group_f = factor(group, levels = c("sex", "age", "period"), 
                      labels = c("sex", "age", "sampling\nperiod")),
     term = fct_reorder(as.factor(term), as.numeric(group_f))
-  ) %>% 
-  glimpse()
+  ) 
 
 fill_pal2 <- c("white", "grey60", "black")
 names(fill_pal2) <- levels(effs$group_f)
