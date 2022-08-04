@@ -3,20 +3,22 @@
 
 library(tidyverse)
 
+
+# set model parameters
 set.seed(999)
 b0 <- 55 # intercept
 b1 <- -0.075 # continuous slope
-b2 <- 2 # factor level 1 coefficient
-b3 <- 1.4 # factor level 1 coefficient
+b2 <- 1.4 # factor level 1 coefficient
+b3 <- 2 # factor level 1 coefficient
 sigma <- 3.0 # residual standard deviation
 N <- 10000 # number of data points
 
 
 # refit 1000 times to estimate potential bias in parameter estimates
-n_sims <- 100
-dat_out <- matrix(NA, nrow = n_sims, ncol = 4)
-
-for (i in 1:n_sims) {
+# n_sims <- 100
+# dat_out <- matrix(NA, nrow = n_sims, ncol = 4)
+# 
+# for (i in 1:n_sims) {
   dum_dat <- data.frame(
     x1 = runif(N, -50, 50) %>% round(., digits = 0)
   ) %>% 
@@ -33,8 +35,8 @@ for (i in 1:n_sims) {
     ) 
   
   m <- lm(y ~ x1 + x_f, data = dum_dat)
-  dat_out[i, ] <- coef(m)
-}
+#   dat_out[i, ] <- coef(m)
+# }
 
 m2 <- lm(y ~ x_f, data = dum_dat)
 
@@ -46,7 +48,7 @@ apply(dat_out, 2, sd)
 # plot of one draw
 ggplot(dum_dat, aes(x = x1, y = y, colour = as.factor(x_f))) +
   geom_point()
-
+dum_dat %>% group_by(x_f) %>% summarize(mean(y))
 
 
 # 

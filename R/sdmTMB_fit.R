@@ -137,10 +137,10 @@ levels(dat_avg$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 mean_dat_plotting <- mean_dat %>% 
   mutate(data = "individual measurements") %>% 
   filter(sex == "female",
-         !is.na(period)) %>% 
+         !is.na(period)) %>%
   select(year_f, mean_fl, period, lo, up, age_f, data) %>%
   rbind(., dat_avg %>% filter(sex == "female") %>% select(-age, -sex)) %>% 
-  group_by(age_f) %>% 
+  group_by(age_f, sex) %>% 
   mutate(
     mean_fl = mean_fl / 10,
     lo = lo / 10,
@@ -205,6 +205,32 @@ dev.off()
 #     res = 250, units = "in")
 # annual_box
 # dev.off()
+
+
+# STATE-SPACE RESIDUALS --------------------------------------------------------
+
+datt <- t(harborSealWA) # MARSS needs time ACROSS columns
+years <- dat[1, ]
+n <- nrow(dat) - 1
+dat <- dat[2:nrow(dat), ]
+legendnames <- (unlist(dimnames(dat)[1]))
+# estimate parameters
+Z.model <- factor(c(1, 1, 1, 1, 1))
+R.model <- "diagonal and equal"
+kem1 <- MARSS(dat, model = list(Z = Z.model, R = R.model))
+
+
+# model assumes each age-sex is unique observation with shared states
+marss_dat <- mean_dat_plotting %>%
+  mutate(age_sex = paste(age_f, sex, sep = "_")) %>% 
+  select(year_f, age_sex, mean_fl) %>% 
+  pivot_wider(names_from = age_sex, values_from = mean_fl)
+
+
+resids.0 <- MARSSresiduals(kem.0, type = "tT")$mar.residuals
+resids.1 <- MARSSresiduals(kem.1, type = "tT")$mar.residuals
+resids.2 <- MARSSresiduals(kem.2, type = "tT")$mar.residuals
+
 
 
 # FIT MODEL  -------------------------------------------------------------------
