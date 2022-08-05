@@ -276,7 +276,7 @@ dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
 fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
-                period_b_cent + period_m_cent + period_n_cent +
+                # period_b_cent + period_m_cent + period_n_cent +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -291,7 +291,8 @@ sanity(fit)
 
 # fit2 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2, k = 7) +
 #                 s(year, by = age, m = 2, k = 7) +
-#                 period + age + sex,
+#                  period_b_cent + period_m_cent + period_n_cent +
+#                  age + sex,
 #               dispformula = ~ 0 + period,
 #               data = dat,
 #               mesh = dum_mesh,
@@ -309,8 +310,8 @@ dharma_sims <- sims %>%
   dharma_residuals(fit)
 # looks good
 
-mean_pred <- apply(sims, 1, mean)
-sd_pred <- apply(sims, 1, sd)
+# mean_pred <- apply(sims, 1, mean)
+# sd_pred <- apply(sims, 1, sd)
 
 
 dat$response_resid <- (mean_pred - dat$fl_cm)
@@ -559,9 +560,9 @@ new_dat2 <- expand.grid(
   age = unique(dat$age),
   sex = "female",
   # period = "Bilton",
-  period_b_cent = 0,
-  period_m_cent = 0,
-  period_n_cent = 0,
+  # period_b_cent = 0,
+  # period_m_cent = 0,
+  # period_n_cent = 0,
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -588,7 +589,9 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
   scale_x_continuous(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
-  )
+  ) +
+  geom_vline(xintercept = c(transition_years), color = "red")
+
 
 png(here::here("outputs", "figs", "smooth_means_no_global_unconstrainedk.png"), 
     height = 5, width = 8.5,

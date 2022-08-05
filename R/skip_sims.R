@@ -199,3 +199,51 @@ dat %>%
   summarize(n = n(),
             sd = sd(fl_cm),
             se = sd / sqrt(n))
+
+
+## FAKE PERIODS ----------------------------------------------------------------
+
+# insert fake periods to determine whether GAM fits are spurious
+random.sample <- function(x) {
+  success <- FALSE
+  while (!success) {
+    new_periods <- sample(x, size = 3, replace = FALSE) %>% sort()
+    success <- all(diff(new_periods) > 15)
+  }
+  return(new_periods)
+}
+
+n_sims <- 250
+out_vec <- list(mode = "vector", length = n_sims)
+
+set.seed(123)
+for (i in 1:n_sims) {
+  new_pers <- random.sample(dat$year)
+  
+  dat2 <- dat %>% 
+    mutate(
+      new_per = case_when(
+        year < new_pers[1] ~ "1",
+        year >= new_pers[1] & year < new_pers[2] ~ "2",
+        year >= new_pers[2] & year < new_pers[3] ~ "3",
+        year >= new_pers[3] ~ "4") %>% 
+        as.factor()
+    ) %>% 
+    # subset for speed
+    sample_n(size = 50000, 
+             replace = FALSE)
+  
+  fit1 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                      s(year, by = age, m = 2) +
+                      new_per + age + sex,
+                    data = dat2
+  )
+  fit2 <- mgcv::gam(fl_cm ~ s(yday_c, by = age, m = 2) +
+                      s(year, by = age, m = 2) +
+                      age + sex,
+                    data = dat2
+  )
+  out_vec[i] <- as.numeric(AIC(fit1) - AIC(fit2))
+}
+
+hist(as.numeric(out_vec))
