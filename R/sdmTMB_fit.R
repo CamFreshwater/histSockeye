@@ -136,11 +136,11 @@ levels(dat_avg$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 mean_dat_plotting <- mean_dat %>% 
   mutate(data = "individual measurements") %>% 
-  filter(sex == "female",
+  filter(#sex == "female",
          !is.na(period)) %>%
-  select(year_f, mean_fl, period, lo, up, age_f, data) %>%
-  rbind(., dat_avg %>% filter(sex == "female") %>% select(-age, -sex)) %>% 
-  group_by(age_f, sex) %>% 
+  select(year_f, mean_fl, period, lo, up, age, age_f, sex, data) %>%
+  rbind(., dat_avg) %>% 
+  group_by(age, age_f, sex) %>% 
   mutate(
     mean_fl = mean_fl / 10,
     lo = lo / 10,
@@ -150,7 +150,7 @@ mean_dat_plotting <- mean_dat %>%
   droplevels() 
 
 annual_dot <- ggplot(
-  mean_dat_plotting, 
+  mean_dat_plotting %>% filter(sex == "female"), 
   aes(x = as.numeric(as.character(year_f)))
 ) +
   geom_pointrange(aes(y = mean_fl, fill = data, ymin = lo, ymax = up, 
@@ -209,6 +209,8 @@ dev.off()
 
 # STATE-SPACE RESIDUALS --------------------------------------------------------
 
+library(MARSS)
+
 datt <- t(harborSealWA) # MARSS needs time ACROSS columns
 years <- dat[1, ]
 n <- nrow(dat) - 1
@@ -222,15 +224,47 @@ kem1 <- MARSS(dat, model = list(Z = Z.model, R = R.model))
 
 # model assumes each age-sex is unique observation with shared states
 marss_dat <- mean_dat_plotting %>%
-  mutate(age_sex = paste(age_f, sex, sep = "_")) %>% 
-  select(year_f, age_sex, mean_fl) %>% 
+  mutate(year = as.numeric(as.character(year_f)),
+         age_sex = paste(sex, age, sep = "_")) %>% 
+  arrange(year) %>% 
+  select(period, year, age_sex, mean_fl) %>% 
   pivot_wider(names_from = age_sex, values_from = mean_fl)
 
+marss_mat <- marss_dat %>% 
+  select(-year) %>% 
+  as.matrix() %>% 
+  t()
+yrs <- marss_dat$year
 
-resids.0 <- MARSSresiduals(kem.0, type = "tT")$mar.residuals
-resids.1 <- MARSSresiduals(kem.1, type = "tT")$mar.residuals
-resids.2 <- MARSSresiduals(kem.2, type = "tT")$mar.residuals
+# estimate parameters
+Z.model <- rep(1, length = nrow(marss_mat)) %>% as.factor()
+R.model <- "diagonal and equal"
+kem1 <- MARSS(marss_mat, model = list(Z = Z.model, R = R.model))
+kem2 <- MARSS(marss_mat, model = list(Z = Z.model, R = R.model, U = matrix(0)))
+AIC(kem1, kem2)
 
+resids_1 <- MARSSresiduals(kem1, type = "tT")
+resids_2 <- MARSSresiduals(kem2, type = "tT")
+
+marss_dat$mod1_resid <- resids_1$state.residuals[1, ]
+marss_dat$mod2_resid <- resids_2$state.residuals[1, ]
+
+# period values 
+transition_years <- marss_dat %>% 
+  filter(!period == "Gilbert-Clemens") %>% 
+  group_by(period) %>% 
+  summarize(first_year = min(year)) %>% 
+  pull(first_year)
+
+ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
+  geom_line(aes(x = year, y = mod2_resid)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_vline(xintercept = c(transition_years), color = "red")
+
+ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
+  geom_boxplot(aes(x = period, y = mod2_resid)) 
+
+plot(kem2$states[1, ])
 
 
 # FIT MODEL  -------------------------------------------------------------------
