@@ -207,6 +207,34 @@ dev.off()
 # dev.off()
 
 
+# AGE COMPOSITION --------------------------------------------------------------
+
+comp_dat <- dat %>% 
+  group_by(year) %>% 
+  mutate(
+    nn = n()
+  ) %>%
+  group_by(age_f, year, period) %>% 
+  summarize(
+    ppn = n() / nn,
+    .groups = "drop"
+  ) %>% 
+  ungroup %>%
+  distinct() %>% 
+  arrange(year) 
+
+ggplot(comp_dat) +
+  geom_col(aes(x = year, y = ppn, fill = age_f)) +
+  scale_fill_discrete(
+    name = "Age Class",
+    labels = c(expression(4[2]), expression(5[2]), expression(5[3]), 
+               expression(6[3]))
+  ) +
+  facet_wrap(~period, scales = "free_x") +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Composition of Dominant Age Classes") 
+
+
 # STATE-SPACE RESIDUALS --------------------------------------------------------
 
 library(MARSS)
@@ -276,7 +304,6 @@ dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
 fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
-                # period_b_cent + period_m_cent + period_n_cent +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -1015,6 +1042,4 @@ ggplot(diff_fecundity) +
   ) +
   theme(legend.position = "none")
 dev.off()
-
-
 
