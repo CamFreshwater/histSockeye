@@ -223,32 +223,33 @@ comp_dat <- dat %>%
   distinct() %>% 
   arrange(year) 
 
-ggplot(comp_dat) +
-  geom_col(aes(x = year, y = ppn, fill = age_f)) +
-  scale_fill_discrete(
-    name = "Age Class",
-    labels = c(expression(4[2]), expression(5[2]), expression(5[3]), 
-               expression(6[3]))
-  ) +
-  facet_wrap(~period, scales = "free_x") +
+# ggplot(comp_dat) +
+#   geom_col(aes(x = year, y = ppn, fill = age_f)) +
+#   scale_fill_discrete(
+#     name = "Age Class",
+#     labels = c(expression(4[2]), expression(5[2]), expression(5[3]), 
+#                expression(6[3]))
+#   ) +
+#   facet_wrap(~period, scales = "free_x") +
+#   ggsidekick::theme_sleek() +
+#   labs(x = "Year", y = "Composition of Dominant Age Classes") 
+
+comp_dot <- ggplot(comp_dat) +
+  geom_point(aes(x = year, y = ppn, shape = period)) +
+  scale_shape_manual(values = shape_pal) +
+  facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Composition of Dominant Age Classes") 
+  labs(x = "Year", y = "Proportion of Sample") 
+
+png(here::here("outputs", "figs", "annual_dot_comp.png"), width = 8, height = 5,
+    res = 250, units = "in")
+comp_dot
+dev.off()
 
 
 # STATE-SPACE RESIDUALS --------------------------------------------------------
 
 library(MARSS)
-
-datt <- t(harborSealWA) # MARSS needs time ACROSS columns
-years <- dat[1, ]
-n <- nrow(dat) - 1
-dat <- dat[2:nrow(dat), ]
-legendnames <- (unlist(dimnames(dat)[1]))
-# estimate parameters
-Z.model <- factor(c(1, 1, 1, 1, 1))
-R.model <- "diagonal and equal"
-kem1 <- MARSS(dat, model = list(Z = Z.model, R = R.model))
-
 
 # model assumes each age-sex is unique observation with shared states
 marss_dat <- mean_dat_plotting %>%
@@ -259,7 +260,7 @@ marss_dat <- mean_dat_plotting %>%
   pivot_wider(names_from = age_sex, values_from = mean_fl)
 
 marss_mat <- marss_dat %>% 
-  select(-year) %>% 
+  select(-year, -period) %>% 
   as.matrix() %>% 
   t()
 yrs <- marss_dat$year
@@ -284,15 +285,28 @@ transition_years <- marss_dat %>%
   summarize(first_year = min(year)) %>% 
   pull(first_year)
 
-ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
+resid_timeseries <- ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
   geom_line(aes(x = year, y = mod2_resid)) +
   geom_hline(yintercept = 0, lty = 2) +
-  geom_vline(xintercept = c(transition_years), color = "red")
+  geom_vline(xintercept = c(transition_years), color = "red") +
+  labs(x = "Year", y = "State Residuals") +
+  ggsidekick::theme_sleek()
 
-ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
-  geom_boxplot(aes(x = period, y = mod2_resid)) 
+resid_boxplot <- ggplot(marss_dat %>% filter(!is.na(mod2_resid))) +
+  geom_boxplot(aes(x = period, y = mod2_resid)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Period", y = "State Residuals") +
+  ggsidekick::theme_sleek()
 
-plot(kem2$states[1, ])
+png(here::here("outputs", "figs", "ss_resid_ts.png"), width = 8, height = 5,
+    res = 250, units = "in")
+resid_timeseries
+dev.off()
+
+png(here::here("outputs", "figs", "ss_resid_bp.png"), width = 8, height = 5,
+    res = 250, units = "in")
+resid_boxplot
+dev.off()
 
 
 # FIT MODEL  -------------------------------------------------------------------
@@ -375,20 +389,20 @@ ggplot(trim_dat) +
 #                 newton_loops = 2
 #               ))
 
-# fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2, k = 5) +
-#                 s(yday_c, by = age, m = 1, k = 5) +
-#                 s(year, m = 2, k = 5) +
-#                 s(year, by = age, m = 1, k = 5) +
-#                 period + age + sex,
-#               dispformula = ~ 0 + period,
-#               data = dat,
-#               mesh = dum_mesh,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 nlminb_loops = 2,
-#                 newton_loops = 2
-#               ))
+fit2 <- sdmTMB(fl_cm ~ 0 + s(yday_c, m = 2) +
+                s(yday_c, by = age, m = 1) +
+                s(year, m = 2) +
+                s(year, by = age, m = 1) +
+                age + sex,
+              dispformula = ~ 0 + period,
+              data = dat,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 2
+              ))
 
 
 # use average measures not used to fit model to determine whether global smooths 
