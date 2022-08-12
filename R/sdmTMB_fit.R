@@ -351,22 +351,58 @@ dharma_sims <- sims %>%
   dharma_residuals(fit)
 # looks good
 
-# mean_pred <- apply(sims, 1, mean)
-# sd_pred <- apply(sims, 1, sd)
+resid_mat <- sims - dat$fl_cm
 
+resid_long <- resid_mat %>% 
+  as.data.frame() %>% 
+  cbind(dat %>% select(year, period), .)  %>% 
+  pivot_longer(-c(year, period), names_to = "iter", values_to = "resid_est") 
 
-dat$response_resid <- (mean_pred - dat$fl_cm)
-dat$pearson_resid <- (mean_pred - dat$fl_cm) / sd_pred
-trim_dat <- dat %>% 
-  sample_n(30000) %>%
-  filter(sex == "male") %>% 
-  pivot_longer(cols = c(response_resid, pearson_resid), 
-               names_to = "resids_type")
-ggplot(trim_dat) +
-  geom_point(aes(x = year_f, y = value, fill = period), shape = 21, alpha = 0.3) +
-  # geom_boxplot(aes(x = year_f, y = value, fill = period), alpha = 0.3) +
-  facet_grid(resids_type ~ age_f, scales = "free_y") +
+resid_dat <- resid_long %>% 
+  group_by(year) %>% 
+  summarize(mean_resid = mean(resid_est),
+            up_resid = quantile(resid_est, 0.975),
+            low_resid = quantile(resid_est, 0.025))
+
+transition_years <- mean_dat_plotting %>% 
+  filter(!period == "Gilbert-Clemens") %>% 
+  mutate(year = as.numeric(as.character(year_f))) %>% 
+  group_by(period) %>% 
+  summarize(first_year = min(year)) %>% 
+  pull(first_year)
+
+png(here::here("outputs", "figs", "gam_resid_ts.png"), width = 8, height = 5,
+    res = 250, units = "in")
+ggplot(resid_dat) +
+  geom_pointrange(aes(x = year, y = mean_resid, ymin = low_resid, ymax = up_resid)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_vline(xintercept = c(transition_years), color = "red") +
+  labs(x = "Year", y = "GAM Residuals") +
   ggsidekick::theme_sleek()
+dev.off()
+
+png(here::here("outputs", "figs", "gam_resid_bp.png"), width = 8, height = 5,
+    res = 250, units = "in")
+ggplot(resid_long) +
+  geom_boxplot(aes(x = period, y = resid_est)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  labs(x = "Period", y = "State Residuals") +
+  ggsidekick::theme_sleek()
+dev.off()
+
+
+# dat$response_resid <- (mean_pred - dat$fl_cm)
+# dat$pearson_resid <- (mean_pred - dat$fl_cm) / sd_pred
+# trim_dat <- dat %>% 
+#   sample_n(30000) %>%
+#   filter(sex == "male") %>% 
+#   pivot_longer(cols = c(response_resid, pearson_resid), 
+#                names_to = "resids_type")
+# ggplot(trim_dat) +
+#   geom_point(aes(x = year_f, y = value, fill = period), shape = 21, alpha = 0.3) +
+#   # geom_boxplot(aes(x = year_f, y = value, fill = period), alpha = 0.3) +
+#   facet_grid(resids_type ~ age_f, scales = "free_y") +
+#   ggsidekick::theme_sleek()
 
 
 
