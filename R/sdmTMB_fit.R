@@ -637,10 +637,7 @@ dat_avg_trim <- dat_avg %>%
     yday_c = 0
   ) %>%
   select(
-    year, fl_cm, 
-    # dataset = data, 
-    # period, 
-    age_f, sex
+    year, fl_cm, age_f, sex
   ) %>%
   droplevels()
 
@@ -694,13 +691,13 @@ formula_no_sm <- remove_s_and_t2(fit$formula[[1]])
 X_ij <- model.matrix(formula_no_sm, data = dat)
 sm <- parse_smoothers(fit$formula[[1]], data = dat)
 sm_start <- sm$b_smooth_start
-pred_X_ij_fec <- predict(mgcv::gam(formula_no_sm, data = dat), 
+pred_X_ij_oos <- predict(mgcv::gam(formula_no_sm, data = dat), 
                          new_dat4, type = "lpmatrix")
 sm_pred <- parse_smoothers(fit$formula[[1]], data = dat, 
                            newdata = new_dat4)
-pred_X1_ij_fec = pred_X_ij_fec
-pred_Zs_fec = sm_pred$Zs
-pred_Xs_fec = sm_pred$Xs
+pred_X1_ij_oos = pred_X_ij_oos
+pred_Zs_oos = sm_pred$Zs
+pred_Xs_oos = sm_pred$Xs
 
 # cov matrix and parameter estimates concatenated to same order as matrix rownames
 cov <- fit$sd_report$cov.fixed
@@ -719,19 +716,19 @@ b_smooth <- ssdr[rownames(ssdr) == "b_smooth", "Estimate"] %>% as.numeric() #ran
 # simulate as above but assuming sigma in both years equal to NFWD value and
 # include calculations; uses same coefficient samples as prediction intervals
 # above
-sim_list_fec <- vector(mode = "list", length = n_sims)
+sim_list_oos <- vector(mode = "list", length = n_sims)
 
 for (i in seq_len(n_sims)) {
-  pred_mu1 <- pred_X1_ij_fec %*% b1_j[i, ]
+  pred_mu1 <- pred_X1_ij_oos %*% b1_j[i, ]
   
-  pred_smooth <- matrix(NA, nrow(pred_X1_ij_fec), length(sm_start))
+  pred_smooth <- matrix(NA, nrow(pred_X1_ij_oos), length(sm_start))
   
   for (ss in seq_along(sm_start)) {
-    beta_ss <- rep(NA, times = ncol(pred_Zs_fec[[ss]]))
+    beta_ss <- rep(NA, times = ncol(pred_Zs_oos[[ss]]))
     for (j in seq_along(beta_ss)) {
       beta_ss[j] <- b_smooth[sm_start[ss] + j]
     }
-    pred_smooth[ , ss] <- pred_Zs_fec[[ss]] %*% beta_ss
+    pred_smooth[ , ss] <- pred_Zs_oos[[ss]] %*% beta_ss
   }
   
   pred_smooth1_i <- apply(pred_smooth, 1, sum)
@@ -741,28 +738,40 @@ for (i in seq_len(n_sims)) {
     # add residual varaince
     rnorm(nrow(new_dat4), mean = 0, new_dat4$sig_est)
   
-  sim_list_fec[[i]] <- fec_dat %>% 
+  sim_list_oos[[i]] <- new_dat4 %>% 
     mutate(
       iter = i,
       pred_mu = as.numeric(pred_mu_i)
     )
 }
 
-smooth_preds4 <- predict(fit, newdata = new_dat4, re_form = NA, se_fit = TRUE)
-smooth_preds4$low <- smooth_preds4$est + (qnorm(0.025) * smooth_preds4$est_se)
-smooth_preds4$up <- smooth_preds4$est + (qnorm(0.975) * smooth_preds4$est_se)
-
-smooth_preds4 %>% 
-  rename(obs = fl_cm) %>% 
+sim_oos <- sim_list_oos %>%
+  bind_rows() %>% 
+  rename(obs = fl_cm, est = pred_mu) %>% 
+  group_by(age_f, sex, year, period, obs) %>% 
+  summarize(low = quantile(est, 0.025),
+            up = quantile(est, 0.975),
+            est = mean(est),
+            .groups = "drop") %>% 
   pivot_longer(cols = c(est, obs), names_to = "mean_size") %>% 
   mutate(
     low = ifelse(mean_size == "obs", NA, low),
     up = ifelse(mean_size == "obs", NA, up)
-  ) %>% 
-  ggplot(.) +
+  ) 
+
+oos_points <- ggplot(sim_oos) +
   geom_pointrange(aes(x = as.factor(year), y = value, ymin = low, ymax = up,
                       fill = mean_size), shape = 21) +
-  facet_wrap(age_f~sex, scales = "free_y")
+  facet_grid(age_f~sex, scales = "free_y", labeller = label_parsed) +
+  labs(x = "Year", y = "Fork Length") +
+  ggsidekick::theme_sleek() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+png(here::here("outputs", "figs", "oos_preds.png"), 
+    height = 8.5, width = 7.5,
+    units = "in", res = 250)
+oos_points
+dev.off()
 
 
 # SUMMARY STATISTICS -----------------------------------------------------------
@@ -885,6 +894,7 @@ for (i in seq_len(n_sims)) {
     select(year, age, age_f, iter, sim_fec, mean_sim_fec) %>% 
     pivot_wider(names_from = "year", values_from = "sim_fec") %>% 
     mutate(diff = `2019` - `1914`,
+           first_diff = diff / `1914`,
            rel_diff = diff / mean_sim_fec) %>% 
     ungroup()
 }
@@ -902,6 +912,7 @@ diff_fecundity <- sim_dat_fec %>%
     rel_mean = mean(rel_diff),
     rel_low = quantile(rel_diff, probs = 0.025),
     rel_up = quantile(rel_diff, probs = 0.975),
+    rel_mean_first = mean(first_diff),
     .groups = "drop"
   ) 
 
