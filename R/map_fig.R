@@ -18,16 +18,13 @@ library(ggplot2)
 # # secondary rivers shapefile
 # rivers2_raw <- st_read(here::here("data", "spatial", "shapefiles",
 #                                   "ne_10m_rivers_north_america.shp"))
-# # secondary rivers shapefile
+# secondary rivers shapefile
 # lakes_raw <- st_read(here::here("data", "spatial", "shapefiles",
 #                                 "british_columbia_water.shp"))
 # lakes_nass <- lakes_raw %>%
 #   #subset to lakes of interest
 #   filter(grepl("Meziadin", NAME) | grepl("Bowser", NAME))
 
-# Nass shapefile from LGL
-lakes_nass <- st_read(here::here("data", "spatial", "shapefiles",
-                                "FWA_Nass_Sockeye_Streams.shp"))
 
 # # bounding box
 # min_lon <- -133.25
@@ -55,16 +52,19 @@ lakes_nass <- st_read(here::here("data", "spatial", "shapefiles",
 # saveRDS(rivers1, here::here("data", "spatial", "trim_rivers1_sf.rds"))
 # saveRDS(rivers2, here::here("data", "spatial", "trim_rivers2_sf.rds"))
 # saveRDS(lakes_nass, here::here("data", "spatial", "lakes_nass_sf.rds"))
-
+# 
 coast <- readRDS(here::here("data", "spatial", "trim_coast_sf.rds"))
 rivers1 <- readRDS(here::here("data", "spatial", "trim_rivers1_sf.rds"))
 rivers2 <- readRDS(here::here("data", "spatial", "trim_rivers2_sf.rds"))
 lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds"))
 
 # combine primary and secondary rivers, dropping unshared columns (2 has extras)
-rivers <- rbind(rivers1, rivers2[names(rivers1)]) 
+rivers <- rbind(rivers1, rivers2[names(rivers1)])
 rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin"))
 
+# Nass shapefile from LGL
+tribs_nass <- st_read(here::here("data", "spatial", "shapefiles",
+                                 "FWA_Nass_Sockeye_Streams.shp"))
 
 
 ## PLOT ------------------------------------------------------------------------
@@ -74,14 +74,13 @@ min_lat <- 53
 max_lon <- -126
 max_lat <- 57
 
-ggplot() +
-  geom_sf(data = lakes_nass, color = "black", fill = "white")
 
 # main map
 main <- ggplot() +
   geom_sf(data = coast, color = "black", fill = "white") +
   geom_sf(data = rivers_sub, color = "black", fill = "black"#, size = 1
           ) +
+  geom_sf(data = tribs_nass, color = "black", fill = "black") +
   geom_sf(data = lakes_nass, color = "black", fill = "black") +
   ggsidekick::theme_sleek() +
   theme(panel.background = element_rect(fill = "darkgrey")) +
