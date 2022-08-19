@@ -66,6 +66,11 @@ rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin"))
 tribs_nass <- st_read(here::here("data", "spatial", "shapefiles",
                                  "FWA_Nass_Sockeye_Streams.shp"))
 
+# Nass watershed file from Carr-Harris
+watershed_nass <- st_read(here::here("data", "spatial", "shapefiles",
+                                 "nass_ws_poly.shp"))
+st_crs(watershed_nass) <- "+proj=utm +zone=9 +units=m"
+
 
 ## PLOT ------------------------------------------------------------------------
 
@@ -78,6 +83,7 @@ max_lat <- 57
 # main map
 main <- ggplot() +
   geom_sf(data = coast, color = "black", fill = "white") +
+  geom_sf(data = watershed_nass, color = "red") +
   geom_sf(data = rivers_sub, color = "black", fill = "black"#, size = 1
           ) +
   geom_sf(data = tribs_nass, color = "black", fill = "black") +
