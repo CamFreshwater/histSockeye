@@ -41,26 +41,18 @@ dat <- dat_in %>%
     period = case_when(
       year < 1957 ~ "Gilbert-Clemens",
       year > 1972 & year < 1994 ~ "Monkley Dump",
-      year > 1993 ~ "Nisga'a",
+      year > 1993 ~ "NFWD",
       TRUE ~ "Bilton"
     ),
     period = fct_relevel(as.factor(period), 
                          "Gilbert-Clemens",
                          "Bilton",
                          "Monkley Dump",
-                         "Nisga'a"),
+                         "NFWD"),
     fl_cm = fl / 10
-    # add dummy variables for sampling period (necessary to make "average"
-    # predictions)
-    # period_b = ifelse(period == "Bilton", 1, 0),
-    # period_m = ifelse(period == "Monkley Dump", 1, 0),
-    # period_n = ifelse(period == "Nisga'a", 1, 0)
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
-# dat$period_b_cent <- dat$period_b - mean(dat$period_b)
-# dat$period_m_cent <- dat$period_m - mean(dat$period_m)
-# dat$period_n_cent <- dat$period_n - mean(dat$period_n)
 
 
 # palettes for raw data and model predictions
@@ -117,7 +109,7 @@ dat_avg <- read.table(here::here("data", "nasscenturyavgv3FLAT.txt"),
     period = case_when(
       iy. < 1957 ~ "Gilbert-Clemens",
       iy. > 1972 & iy. < 1994 ~ "Monkley Dump",
-      iy. > 1993 ~ "Nisga'a",
+      iy. > 1993 ~ "NFWD",
       TRUE ~ "Bilton"
     ),
     age_f = age,
@@ -125,7 +117,7 @@ dat_avg <- read.table(here::here("data", "nasscenturyavgv3FLAT.txt"),
                          "Gilbert-Clemens",
                          "Bilton",
                          "Monkley Dump",
-                         "Nisga'a"),
+                         "NFWD"),
     lo = NaN,
     up = NaN,
     data = "annual average"
@@ -666,14 +658,14 @@ new_dat4 <- expand.grid(
     period = case_when(
       year < 1957 ~ "Gilbert-Clemens",
       # year > 1972 & year < 1994 ~ "Monkley Dump",
-      # year > 1993 ~ "Nisga'a",
+      # year > 1993 ~ "NFWD",
       TRUE ~ "Bilton"
     ),
     period = fct_relevel(as.factor(period),
                          "Gilbert-Clemens",
                          "Bilton"#,
                          # "Monkley Dump",
-                         # "Nisga'a"
+                         # "NFWD"
                          ),
     age_f = as.factor(age)
     ) 
@@ -803,10 +795,7 @@ purrr::map2(smooth_list, age_names, function (x, y) {
 fec_dat <- expand.grid(
   age = unique(dat$age),
   sex = "female",
-  period = "Nisga'a",
-  # period_b_cent = 0,
-  # period_m_cent = 0,
-  # period_n_cent = 1,
+  period = "NFWD",
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), by = 1),
   # dummy spatial variables required 
@@ -1080,14 +1069,14 @@ dev.off()
 #     period = case_when(
 #       year < 1957 ~ "Gilbert-Clemens",
 #       year > 1972 & year < 1994 ~ "Monkley Dump",
-#       year > 1993 ~ "Nisga'a",
+#       year > 1993 ~ "NFWD",
 #       TRUE ~ "Bilton"
 #     ),
 #     period = fct_relevel(as.factor(period), 
 #                          "Gilbert-Clemens",
 #                          "Bilton",
 #                          "Monkley Dump",
-#                          "Nisga'a"),
+#                          "NFWD"),
 #     age_f = as.factor(age)
 #     ) %>% 
 #   # join centered values
@@ -1273,14 +1262,14 @@ dev.off()
 #     period = case_when(
 #       year < 1957 ~ "Gilbert-Clemens",
 #       year > 1972 & year < 1994 ~ "Monkley Dump",
-#       year > 1993 ~ "Nisga'a",
+#       year > 1993 ~ "NFWD",
 #       TRUE ~ "Bilton"
 #     ),
 #     period = fct_relevel(as.factor(period), 
 #                          "Gilbert-Clemens",
 #                          "Bilton",
 #                          "Monkley Dump",
-#                          "Nisga'a"),
+#                          "NFWD"),
 #     age_f = as.factor(age)
 #     ) %>% 
 #   # join centered values
