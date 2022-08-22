@@ -83,7 +83,7 @@ max_lat <- 57
 # main map
 main <- ggplot() +
   geom_sf(data = coast, color = "black", fill = "white") +
-  geom_sf(data = watershed_nass, color = "red") +
+  geom_sf(data = watershed_nass, color = "red", alpha = 0.5) +
   geom_sf(data = rivers_sub, color = "black", fill = "black"#, size = 1
           ) +
   geom_sf(data = tribs_nass, color = "black", fill = "black") +
