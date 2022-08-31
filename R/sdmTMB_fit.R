@@ -134,9 +134,9 @@ mean_dat_plotting <- mean_dat %>%
   rbind(., dat_avg) %>% 
   group_by(age, age_f, sex) %>% 
   mutate(
-    mean_fl = mean_fl / 10,
-    lo = lo / 10,
-    up = up / 10,
+    # mean_fl = mean_fl / 10,
+    # lo = lo / 10,
+    # up = up / 10,
     overall_mean = mean(mean_fl, na.rm = T)) %>% 
   ungroup() %>% 
   droplevels() 
@@ -149,7 +149,7 @@ annual_dot <- ggplot(
                       shape = period), size = 0.3) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length") +
+  labs(x = "Year", y = "Fork Length (cm)") +
   scale_x_continuous(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
@@ -235,7 +235,7 @@ dat$x <- runif(nrow(dat))
 dat$y <- runif(nrow(dat))
 dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
-fit <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
+fit <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
                 age + sex,
               dispformula = ~ 0 + period,
@@ -435,7 +435,7 @@ age_eff_dot <- fe_preds %>%
   ggsidekick::theme_sleek() +
   scale_x_discrete("Age Class",
                    labels = parse(text = as.character(levels(fe_preds$age_f)))) +
-  labs(x = "Age Class", y = "Estimated Mean") +
+  labs(x = "Age Class", y = "Estimated Mean Fork Length (mm)") +
   scale_fill_brewer(palette = 1) +
   theme(legend.position = "none")
 
@@ -446,23 +446,21 @@ sex_eff_dot <- fe_preds %>%
   geom_pointrange(aes(x = sex, y = est, fill = sex, ymin = low, ymax = up),
                   shape = 21) +
   ggsidekick::theme_sleek() +
-  labs(x = "Sex", y = "Estimated Mean") +
+  labs(x = "Sex", y = "Estimated Mean Fork Length (mm)") +
   scale_fill_brewer(palette = 5, type = "seq") +
   theme(legend.position = "none")
 
 
 # sigma estimates
-# note that model estimates are ln(sigma) and need to be exponentiated
-
+# note that model estimates are sd (not variance = sd^2)
 period_sig <- data.frame(
-  ln_sig_est = as.list(fit$sd_report, "Estimate")$b_disp_k,
-  ln_sig_se = as.list(fit$sd_report, "Std. Error")$b_disp_k,
+  sig_est = as.list(fit$sd_report, "Estimate")$b_disp_k,
+  sig_se = as.list(fit$sd_report, "Std. Error")$b_disp_k,
   period = unique(dat$period)
 ) %>% 
   mutate(
-    sig_est = exp(ln_sig_est),
-    low = exp(ln_sig_est + (qnorm(0.025) * ln_sig_se)),
-    up = exp(ln_sig_est + (qnorm(0.975) * ln_sig_se))
+    low = sig_est + (qnorm(0.025) * sig_se),
+    up = sig_est + (qnorm(0.975) * sig_se)
   )
 
 period_sig_dot <- ggplot(period_sig) +
@@ -563,7 +561,7 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (cm)") +
+  labs(x = "Year", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
     breaks = seq(1915, 2015, by = 20),
@@ -606,10 +604,11 @@ smooth_yday <- ggplot(smooth_preds2,
   geom_line() +
   geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (cm)") +
+  labs(x = "Year Day", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
-    breaks = seq(1915, 2015, by = 20),
+    breaks = c(-23.5, 0, 26.4, 51.4),
+    labels = c(175, 200, 225, 250),
     expand = c(0.02, 0.02)
   )
 
@@ -624,12 +623,15 @@ dev.off()
 
 dat_avg_trim <- dat_avg %>%
   mutate(
-    fl_cm = mean_fl / 10,
+    # fl_cm = mean_fl / 10,
     year = as.numeric(as.character(year_f)),
     yday_c = 0
   ) %>%
   select(
-    year, fl_cm, age_f, sex
+    year,
+    mean_fl,
+    # fl_cm, 
+    age_f, sex
   ) %>%
   droplevels()
 
@@ -705,9 +707,6 @@ bs <- cov_sim[ , grep("bs", colnames(cov))] # fixed effect smooths
 ssdr <- summary(fit$sd_report)
 b_smooth <- ssdr[rownames(ssdr) == "b_smooth", "Estimate"] %>% as.numeric() #random smooths
 
-# simulate as above but assuming sigma in both years equal to NFWD value and
-# include calculations; uses same coefficient samples as prediction intervals
-# above
 sim_list_oos <- vector(mode = "list", length = n_sims)
 
 for (i in seq_len(n_sims)) {
@@ -724,10 +723,10 @@ for (i in seq_len(n_sims)) {
   }
   
   pred_smooth1_i <- apply(pred_smooth, 1, sum)
-  pred_smooth2_i <- pred_Xs_fec %*% bs[i, ]
+  pred_smooth2_i <- pred_Xs_oos %*% bs[i, ]
   pred_smooth_i <- pred_smooth1_i + pred_smooth2_i
   pred_mu_i <- pred_mu1 + pred_smooth_i + 
-    # add residual varaince
+    # add residual variance
     rnorm(nrow(new_dat4), mean = 0, new_dat4$sig_est)
   
   sim_list_oos[[i]] <- new_dat4 %>% 
@@ -738,8 +737,10 @@ for (i in seq_len(n_sims)) {
 }
 
 sim_oos <- sim_list_oos %>%
-  bind_rows() %>% 
-  rename(obs = fl_cm, est = pred_mu) %>% 
+  bind_rows() %>%
+  rename(obs = mean_fl,
+         # obs = fl_cm,
+         est = pred_mu) %>% 
   group_by(age_f, sex, year, period, obs) %>% 
   summarize(low = quantile(est, 0.025),
             up = quantile(est, 0.975),
@@ -868,7 +869,8 @@ for (i in seq_len(n_sims)) {
     # ) %>% 
     mutate(
       # convert to POH length in mm using inverse of equation in main manuscript
-      sim_hl =  (0.833 * pred_mu * 10) - 3.508,
+      sim_hl =  (0.833 * pred_mu #* 10
+                 ) - 3.508,
       fec_beta = ifelse(age %in% c("42", "53"), 10.67, 9.77),
       fec_int = ifelse(age %in% c("42", "53"), 1811.9, 1244.7),
       sim_fec = (fec_beta * sim_hl - fec_int) / 1000
@@ -898,10 +900,12 @@ diff_fecundity <- sim_dat_fec %>%
     mean = mean(diff),
     low = quantile(diff, probs = 0.025),
     up = quantile(diff, probs = 0.975),
-    rel_mean = mean(rel_diff),
-    rel_low = quantile(rel_diff, probs = 0.025),
-    rel_up = quantile(rel_diff, probs = 0.975),
-    rel_mean_first = mean(first_diff),
+    # rel_mean = mean(rel_diff),
+    # rel_low = quantile(rel_diff, probs = 0.025),
+    # rel_up = quantile(rel_diff, probs = 0.975),
+    rel_mean = mean(first_diff),
+    rel_low = quantile(first_diff, probs = 0.025),
+    rel_up = quantile(first_diff, probs = 0.975),
     .groups = "drop"
   ) 
 
