@@ -56,7 +56,9 @@ library(ggplot2)
 coast <- readRDS(here::here("data", "spatial", "trim_coast_sf.rds"))
 rivers1 <- readRDS(here::here("data", "spatial", "trim_rivers1_sf.rds"))
 rivers2 <- readRDS(here::here("data", "spatial", "trim_rivers2_sf.rds"))
-lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds"))
+lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds")) %>% 
+  #remove bowser for now
+  filter(!grepl("Bowser", NAME))
 
 # combine primary and secondary rivers, dropping unshared columns (2 has extras)
 rivers <- rbind(rivers1, rivers2[names(rivers1)])
@@ -114,7 +116,7 @@ inset_map <- ggplot() +
             ylim = c(40, 70), xlim = c(-155, -120))
 
 
-png(here::here("outputs", "figs", "map.png"), 
+png(here::here("outputs", "figs", "map_raw.png"), 
     height = 7, width = 6, units = "in", res = 300)
 cowplot::ggdraw(main) +
   cowplot::draw_plot(inset_map, x = 0.75, y = 0.095, vjust = -0.2, hjust = 0.05,
