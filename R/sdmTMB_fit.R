@@ -88,9 +88,6 @@ mean_dat <- dat2 %>%
   distinct() 
 empty_yrs <- mean_dat %>% filter(is.na(mean_fl)) %>% pull(year_f) %>% unique()
 
-# write.csv(mean_dat, here::here("outputs", "data", "summary_stats.csv"),
-#           row.names = FALSE)
-
 
 # add in averages for years that are missing individual samples
 dat_avg <- read.table(here::here("data", "nasscenturyavgv3FLAT.txt"),
@@ -149,7 +146,7 @@ annual_dot <- ggplot(
                       shape = period), size = 0.3) +
   facet_wrap(~age_f, labeller = label_parsed) +
   ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (cm)") +
+  labs(x = "Year", y = "Fork Length (mm)") +
   scale_x_continuous(
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
@@ -773,7 +770,6 @@ dev.off()
 # time series for each age; control and don't control for period effects
 
 smooth_list <- split(smooth_preds, smooth_preds$age_f) 
-# smooth_period_list <- split(sim_dat, sim_dat$age_f) 
 age_names <- c("42", "52", "53", "63")
 
 purrr::map2(smooth_list, age_names, function (x, y) {
@@ -789,6 +785,19 @@ purrr::map2(smooth_list, age_names, function (x, y) {
   )
 }) %>% 
   bind_rows
+ 
+# dum <- smooth_preds %>% 
+#   mutate(
+#     sim_hl =  (0.833 * est) - 3.508,
+#     fec_beta = ifelse(age %in% c("42", "53"), 10.67, 9.77),
+#     fec_int = ifelse(age %in% c("42", "53"), 1811.9, 1244.7),
+#     sim_fec = (fec_beta * sim_hl - fec_int) / 1000
+#   ) %>% 
+#   filter(year %in% c("2019", "1914")) %>% 
+#   select(year, age_f, sim_fec) %>% 
+#   pivot_wider(names_from = "year", values_from = "sim_fec") %>% 
+#   mutate(diff = `2019` - `1914`)
+
 
 
 ## DIFFERENCE IN FECUNDITY -----------------------------------------------------
@@ -897,12 +906,15 @@ sim_dat_fec <- data.table::rbindlist(sim_list_fec) %>%
 diff_fecundity <- sim_dat_fec %>% 
   group_by(age_f) %>% 
   summarize(
+    # mean_fec = mean(mean_sim_fec),
+    # mean_2019 = mean(`2019`),
+    # mean_1914 = mean(`1914`),
     mean = mean(diff),
     low = quantile(diff, probs = 0.025),
     up = quantile(diff, probs = 0.975),
-    # rel_mean = mean(rel_diff),
-    # rel_low = quantile(rel_diff, probs = 0.025),
-    # rel_up = quantile(rel_diff, probs = 0.975),
+    # rel_mean2 = mean(rel_diff),
+    # rel_low2 = quantile(rel_diff, probs = 0.025),
+    # rel_up2 = quantile(rel_diff, probs = 0.975),
     rel_mean = mean(first_diff),
     rel_low = quantile(first_diff, probs = 0.025),
     rel_up = quantile(first_diff, probs = 0.975),
