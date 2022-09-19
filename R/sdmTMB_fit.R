@@ -488,55 +488,12 @@ cowplot::plot_grid(#period_eff_dot,
 dev.off()
 
 
-# EFFECT SIZES -----------------------------------------------------------------
-
-# alternative to above that plots raw effect sizes
-# effs <- tidy(fit, effects = "fixed") %>% 
-#   filter(!term == "(Intercept)") %>% 
-#   mutate(
-#     low = estimate + (qnorm(0.025) * std.error),
-#     up = estimate + (qnorm(0.975) * std.error),
-#     group = case_when(
-#       grepl("period", term) ~ "period",
-#       grepl("age", term) ~ "age",
-#       grepl("sex", term) ~ "sex",
-#       TRUE ~ term
-#     ),
-#     group_f = factor(group, levels = c("sex", "age", "period"), 
-#                      labels = c("sex", "age", "sampling\nperiod")),
-#     term = fct_reorder(as.factor(term), as.numeric(group_f))
-#   ) 
-# 
-# fill_pal2 <- c("white", "grey60", "black")
-# names(fill_pal2) <- levels(effs$group_f)
-# 
-# png(here::here("outputs", "figs", "est_effects.png"), 
-#     height = 4, width = 7,
-#     units = "in", res = 250)
-# ggplot(effs %>% filter(!term == "(Intercept)")) +
-#   geom_pointrange(aes(x = term, y = estimate, ymin = low, ymax = up, 
-#                       fill = group_f), shape = 21) +
-#   geom_hline(aes(yintercept = 0), lty = 2) +
-#   scale_fill_manual(values = fill_pal2, name = "Categorical\nEffect") +
-#   scale_x_discrete(
-#     labels = c("Male", expression(5[2]), expression(5[3]), 
-#                expression(6[3]), "Bilton", "Monkley Dump", "NFWD")
-#   ) +
-#   labs(y = "Estimated Effect Size", x = "Model Parameter") +
-#   ggsidekick::theme_sleek()
-# dev.off()
-
-
 # SMOOTH PREDICTIONS  ----------------------------------------------------------
 
 # year effects (assuming fixed period)
 new_dat2 <- expand.grid(
   age = unique(dat$age),
   sex = "female",
-  # period = "Bilton",
-  # period_b_cent = 0,
-  # period_m_cent = 0,
-  # period_n_cent = 0,
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -577,7 +534,6 @@ dev.off()
 new_dat3 <- expand.grid(
   age = unique(dat$age),
   sex = "female",
-  # period = "Gilbert-Clemens",
   period_b_cent = 0,
   period_m_cent = 0,
   period_n_cent = 0,
@@ -755,7 +711,8 @@ oos_points <- ggplot(sim_oos) +
   facet_grid(age_f~sex, scales = "free_y", labeller = label_parsed) +
   labs(x = "Year", y = "Fork Length") +
   ggsidekick::theme_sleek() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        legend.position = "none")
 
 png(here::here("outputs", "figs", "oos_preds.png"), 
     height = 8.5, width = 7.5,

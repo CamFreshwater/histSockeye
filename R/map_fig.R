@@ -62,7 +62,8 @@ lakes_nass <- readRDS(here::here("data", "spatial", "lakes_nass_sf.rds")) %>%
 
 # combine primary and secondary rivers, dropping unshared columns (2 has extras)
 rivers <- rbind(rivers1, rivers2[names(rivers1)])
-rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin"))
+rivers_sub <- rivers %>% filter(name %in% c("Nass", "Bell-Irving", "Meziadin",
+                                            "Skeena"))
 
 # Nass shapefile from LGL
 tribs_nass <- st_read(here::here("data", "spatial", "shapefiles",
