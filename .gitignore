@@ -16,8 +16,8 @@
 knitr-cache
 .RData
 .RHistory
-hake-example.tex
 data/spatial/shapefiles/
+R/defunct/
 
 myNotes.*
 #outputs/
