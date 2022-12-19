@@ -903,3 +903,29 @@ png(here::here("outputs", "figs", "smooth_85_removed.png"),
 smooth_year_85
 dev.off()
 
+
+# FIT SUPP MODEL  --------------------------------------------------------------
+
+# fit alternative model with intercepts for sampling period to include in supp
+# analysis
+
+# make fake mesh (necessary in current branch)
+dat$x <- runif(nrow(dat))
+dat$y <- runif(nrow(dat))
+dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
+
+fit_p <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
+                s(year, by = age, m = 2) +
+                # period +
+                age + sex,
+              dispformula = ~ 0 + period,
+              data = dat,
+              mesh = dum_mesh,
+              spatial = "off",
+              spatiotemporal = "off"#,
+              # control = sdmTMBcontrol(
+              #   nlminb_loops = 2,
+              #   newton_loops = 2
+              # )
+              )
+sanity(fit)
