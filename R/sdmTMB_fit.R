@@ -9,7 +9,8 @@
 
 # install specific branch of sdmTMB that includes dispersion formula
 devtools::install_github("https://github.com/pbs-assess/sdmTMB",
-                         ref = "dispformula")
+                         ref = "dispformula2",
+                         force = TRUE)
 
 
 library(tidyverse)
@@ -176,12 +177,32 @@ dev.off()
 
 # AGE COMPOSITION --------------------------------------------------------------
 
-comp_dat <- dat %>% 
+comp_dat <-  dat_in %>%
+  mutate(
+    year_f = as.factor(year),
+    age_f = age,
+    period = case_when(
+      year < 1957 ~ "Gilbert-Clemens",
+      year > 1972 & year < 1994 ~ "Monkley Dump",
+      year > 1993 ~ "NFWD",
+      TRUE ~ "Bilton"
+    ),
+    period = fct_relevel(as.factor(period), 
+                         "Gilbert-Clemens",
+                         "Bilton",
+                         "Monkley Dump",
+                         "NFWD"),
+    dominant_age = ifelse(
+      age %in% c("42", "52", "53", "63"),
+      TRUE,
+      FALSE
+    )
+  ) %>%  
   group_by(year) %>% 
   mutate(
     nn = n()
   ) %>%
-  group_by(age_f, year, period) %>% 
+  group_by(dominant_age, age_f, year, period) %>% 
   summarize(
     ppn = n() / nn,
     .groups = "drop"
@@ -190,7 +211,7 @@ comp_dat <- dat %>%
   distinct() %>% 
   arrange(year) 
 
-comp_dot <- ggplot(comp_dat) +
+comp_dot <- ggplot(comp_dat %>% filter(dominant_age == TRUE)) +
   geom_point(aes(x = year, y = ppn, shape = period)) +
   scale_shape_manual(values = shape_pal) +
   facet_wrap(~age_f, labeller = label_parsed) +
@@ -201,6 +222,16 @@ png(here::here("outputs", "figs", "annual_dot_comp.png"), width = 8, height = 5,
     res = 250, units = "in")
 comp_dot
 dev.off()
+
+ppn_dom <- comp_dat %>% 
+  group_by(dominant_age, year) %>% 
+  summarize(
+    sum_ppn = sum(ppn),
+    .groups = "drop"
+  ) %>% 
+  ungroup() %>% 
+  filter(dominant_age == TRUE) %>% 
+  pull(sum_ppn)
 
 
 # FIT MODEL  -------------------------------------------------------------------
@@ -616,7 +647,7 @@ sim_oos <- sim_list_oos %>%
   ) 
 
 oos_points <- ggplot(sim_oos) +
-  geom_pointrange(aes(x = as.factor(year), y = value, ymin = low, ymax = up,
+  geom_pointrange(aes(x = year, y = value, ymin = low, ymax = up,
                       fill = mean_size), shape = 21) +
   facet_grid(age_f~sex, scales = "free_y", labeller = label_parsed) +
   labs(x = "Year", y = "Fork Length") +
@@ -916,11 +947,11 @@ dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
 
 fit_p <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
-                # period +
+                period +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
-              mesh = dum_mesh,
+              # mesh = dum_mesh,
               spatial = "off",
               spatiotemporal = "off"#,
               # control = sdmTMBcontrol(
@@ -929,3 +960,17 @@ fit_p <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
               # )
               )
 sanity(fit)
+
+pcod_spde <- make_mesh(pcod_2011, c("X", "Y"), cutoff = 25)
+
+# Tweedie:
+m <- sdmTMB(density ~ 0 + depth_scaled + depth_scaled2 + as.factor(year),
+            data = pcod_2011, time = "year", mesh = pcod_spde, 
+            family = tweedie(link = "log"))
+
+pkg_list <- list("vctrs",
+                 "tibble",
+                 "ps",
+                 "cli",
+                 "testthat")
+purrr::map(pkg_list, install.packages)
