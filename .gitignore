@@ -18,6 +18,7 @@ knitr-cache
 .RHistory
 data/spatial/shapefiles/
 R/defunct/
+outputs/model_fits/
 
 myNotes.*
 #outputs/

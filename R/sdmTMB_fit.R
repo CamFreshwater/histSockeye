@@ -9,8 +9,7 @@
 
 # install specific branch of sdmTMB that includes dispersion formula
 devtools::install_github("https://github.com/pbs-assess/sdmTMB",
-                         ref = "dispformula2",
-                         force = TRUE)
+                         ref = "dispformula2")
 
 
 library(tidyverse)
@@ -236,17 +235,12 @@ ppn_dom <- comp_dat %>%
 
 # FIT MODEL  -------------------------------------------------------------------
 
-# make fake mesh (necessary in current branch)
-dat$x <- runif(nrow(dat))
-dat$y <- runif(nrow(dat))
-dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
-
 fit <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
-              mesh = dum_mesh,
+              # mesh = dum_mesh,
               spatial = "off",
               spatiotemporal = "off",
               control = sdmTMBcontrol(
@@ -254,6 +248,10 @@ fit <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 newton_loops = 2
               ))
 sanity(fit)
+saveRDS(fit,
+        here::here(
+          "outputs", "model_fits", "fit.rds"
+        ))
 
 # check residuals
 sims <- simulate(fit, nsim = 250)
@@ -935,42 +933,233 @@ smooth_year_85
 dev.off()
 
 
-# FIT SUPP MODEL  --------------------------------------------------------------
+# FIT SUPP MODEL 1 -------------------------------------------------------------
 
 # fit alternative model with intercepts for sampling period to include in supp
-# analysis
-
-# make fake mesh (necessary in current branch)
-dat$x <- runif(nrow(dat))
-dat$y <- runif(nrow(dat))
-dum_mesh <- make_mesh(dat, c("x", "y"), cutoff = 1000)
+# analysis (improved AIC, but parameter estimates for intercepts are unreliable)
 
 fit_p <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 s(year, by = age, m = 2) +
                 period +
                 age + sex,
-              dispformula = ~ 0 + period,
+              dispformula = ~ period,
               data = dat,
-              # mesh = dum_mesh,
               spatial = "off",
-              spatiotemporal = "off"#,
-              # control = sdmTMBcontrol(
-              #   nlminb_loops = 2,
-              #   newton_loops = 2
-              # )
+              spatiotemporal = "off",
+              control = sdmTMBcontrol(
+                nlminb_loops = 2,
+                newton_loops = 2
               )
-sanity(fit)
+              )
+sanity(fit_p)
 
-pcod_spde <- make_mesh(pcod_2011, c("X", "Y"), cutoff = 25)
 
-# Tweedie:
-m <- sdmTMB(density ~ 0 + depth_scaled + depth_scaled2 + as.factor(year),
-            data = pcod_2011, time = "year", mesh = pcod_spde, 
-            family = tweedie(link = "log"))
+# generate annual predictions
+new_dat_p <- expand.grid(
+  age = unique(dat$age),
+  sex = "female",
+  yday_c = 0,
+  year = seq(min(dat$year), max(dat$year), length = 100)
+) %>% 
+  mutate(
+    age_f = as.factor(age),
+    period = "Gilbert-Clemens"
+  )
 
-pkg_list <- list("vctrs",
-                 "tibble",
-                 "ps",
-                 "cli",
-                 "testthat")
-purrr::map(pkg_list, install.packages)
+# insufficient vector memory to generate confidence intervals
+smooth_preds_p <- predict(fit_p, 
+                          newdata = new_dat_p)
+
+smooth_year_p <- ggplot(smooth_preds_p, aes(x = year, y = est)) +
+  geom_line() +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (mm)") +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  ) 
+
+
+png(here::here("outputs", "figs", "year_smooth_period_ints.png"), 
+    height = 5, width = 8.5,
+    units = "in", res = 250)
+smooth_year_p
+dev.off()
+
+
+## calculate difference in size (as above)
+smooth_list_p <- split(smooth_preds_p, smooth_preds_p$age_f) 
+age_names <- c("42", "52", "53", "63")
+
+purrr::map2(smooth_list_p, age_names, function (x, y) {
+  ts <- x$est
+  #calc time series mean for each iteration
+  ts_mean = mean(ts)
+  data.frame(
+    mean_diff = ts[length(ts)] - ts_mean,
+    first_diff = ts[length(ts)] - ts[1],
+    mean_rel_diff = (ts[length(ts)] - ts_mean) / ts_mean,
+    first_rel_diff = (ts[length(ts)] - ts[1]) / ts[1],
+    age = y
+  )
+}) %>% 
+  bind_rows()
+
+
+## simulate and attempt to recover pars
+
+sims_p <- simulate(fit_p, 50)
+fix_pars_est <- tidy(fit_p, effects = "fixed") %>% 
+  mutate(model = "period")
+fix_pars_est$iter <- NA_character_
+fix_pars_est$up <- fix_pars_est$estimate + (1.96 * fix_pars_est$std.error)
+fix_pars_est$lo <- fix_pars_est$estimate - (1.96 * fix_pars_est$std.error)
+
+out_list <- vector(mode = "list", length = 50)
+for (i in seq_len(ncol(sims_p))) {
+  dumm <- dat %>% mutate(sim_fl = sims_p[ , i])
+  fit_dumm <- sdmTMB(sim_fl ~ s(yday_c, by = age, m = 2) +
+                    s(year, by = age, m = 2) +
+                    period +
+                    age + sex,
+                  dispformula = ~ 0 + period,
+                  data = dumm,
+                  spatial = "off",
+                  spatiotemporal = "off",
+                  control = sdmTMBcontrol(
+                    nlminb_loops = 2,
+                    newton_loops = 2
+                  )
+  )
+  out_list[[i]] <- tidy(fit_dumm, effects = "fixed") %>% 
+    mutate(model = paste("sim", i, sep = "_"))
+  
+  rm("fit_dumm")
+  gc()
+  
+  saveRDS(out_list, 
+          here::here("outputs", "model_fits", "sim_fix_eff.rds"))
+}
+
+sim_dat <- out_list %>% 
+  bind_rows() %>% 
+  mutate(
+    iter = model,
+    model = "sim"
+  )
+sim_dat$model <- "period"
+
+
+## as above but with original model
+sims <- simulate(fit, 50)
+fix_pars_est1 <- tidy(fit, effects = "fixed") %>% 
+  mutate(model = "no_period",
+         iter = NA_character_,
+         up = estimate + (1.96 * std.error),
+         lo = estimate - (1.96 * std.error))
+
+out_list2 <- vector(mode = "list", length = 50)
+for (i in seq_len(ncol(sims))) {
+  dumm <- dat %>% mutate(sim_fl = sims[ , i])
+  fit_dumm <- sdmTMB(sim_fl ~ s(yday_c, by = age, m = 2) +
+                       s(year, by = age, m = 2) +
+                       # period +
+                       age + sex,
+                     dispformula = ~ 0 + period,
+                     data = dumm,
+                     spatial = "off",
+                     spatiotemporal = "off",
+                     control = sdmTMBcontrol(
+                       nlminb_loops = 2,
+                       newton_loops = 2
+                     )
+  )
+  out_list2[[i]] <- tidy(fit_dumm, effects = "fixed") %>% 
+    mutate(model = paste("sim_no_period", i, sep = "_"))
+  
+  rm("fit_dumm")
+  gc()
+  
+  saveRDS(out_list2, 
+          here::here("outputs", "model_fits", "sim_fix_eff_no_period.rds"))
+}
+
+sim_dat2 <- out_list2 %>% 
+  bind_rows() %>% 
+  mutate(
+    iter = model,
+    model = "no_period"
+  )
+
+# combine
+sim_dat_all <- rbind(sim_dat, sim_dat2)
+fix_pars_all <- rbind(fix_pars_est,
+                      fix_pars_est1)
+saveRDS(list(sim_dat = sim_dat_all,
+             fix_pars = fix_pars_all),
+        here::here("outputs", "model_fits", "sim_recovery_supp_dat.rds"))
+
+png(here::here("outputs", "figs", "par_recovery_period_ints.png"),
+    height = 5, width = 5, units = "in", res = 200)
+ggplot() +
+  geom_boxplot(data = sim_dat_all,
+               aes(x = term, y = estimate, fill = model), alpha = 0.4) +
+  geom_pointrange(data = fix_pars_all,
+                  aes(x = term, y = estimate, ymin = lo, ymax = up, 
+                      fill = model, colour = model),
+                  position = position_jitterdodge(),
+                  # position = position_dodge(width = 0.85),
+                  shape = 21) +
+  facet_wrap(~term, scales = "free") +
+  ggsidekick::theme_sleek()
+dev.off()
+
+
+
+# FIT SUPP MODEL 2 -------------------------------------------------------------
+
+# fit alternative model with unique age-sex effects
+dat$age_sex <- paste(dat$age, dat$sex, sep = "_")
+
+fit_as <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
+                  s(year, by = age, m = 2) +
+                  period +
+                  age_sex,
+                dispformula = ~ 0 + period,
+                data = dat,
+                spatial = "off",
+                spatiotemporal = "off",
+                control = sdmTMBcontrol(
+                  nlminb_loops = 2,
+                  newton_loops = 2
+                )
+)
+sanity(fit_as)
+
+
+# generate annual predictions
+new_dat_p <- expand.grid(
+  age = unique(dat$age),
+  sex = "female",
+  yday_c = 0,
+  year = seq(min(dat$year), max(dat$year), length = 100)
+) %>% 
+  mutate(
+    age_f = as.factor(age),
+    period = "Gilbert-Clemens"
+  )
+
+# insufficient vector memory to generate confidence intervals
+smooth_preds_p <- predict(fit_p, 
+                          newdata = new_dat_p)
+
+smooth_year_p <- ggplot(smooth_preds_p, aes(x = year, y = est)) +
+  geom_line() +
+  ggsidekick::theme_sleek() +
+  labs(x = "Year", y = "Fork Length (mm)") +
+  facet_wrap(~age_f, labeller = label_parsed) +
+  scale_x_continuous(
+    breaks = seq(1915, 2015, by = 20),
+    expand = c(0.02, 0.02)
+  ) 
