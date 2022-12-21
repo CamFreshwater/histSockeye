@@ -1120,10 +1120,10 @@ dev.off()
 # FIT SUPP MODEL 2 -------------------------------------------------------------
 
 # fit alternative model with unique age-sex effects
-dat$age_sex <- paste(dat$age, dat$sex, sep = "_")
+dat$age_sex <- as.factor(paste(dat$age, dat$sex, sep = "_"))
 
 fit_as <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
-                  s(year, by = age, m = 2) +
+                  s(year, by = age_sex, m = 2) +
                   period +
                   age_sex,
                 dispformula = ~ 0 + period,
@@ -1139,22 +1139,24 @@ sanity(fit_as)
 
 
 # generate annual predictions
-new_dat_p <- expand.grid(
+new_dat_as <- expand.grid(
   age = unique(dat$age),
-  sex = "female",
+  sex = unique(dat$sex),
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100)
 ) %>% 
   mutate(
     age_f = as.factor(age),
-    period = "Gilbert-Clemens"
-  )
+    period = "Gilbert-Clemens",
+    age_sex = as.factor(paste(age, sex, sep = "_"))
+  ) 
 
-# insufficient vector memory to generate confidence intervals
-smooth_preds_p <- predict(fit_p, 
-                          newdata = new_dat_p)
+smooth_preds_as <- predict(fit_as, 
+                          newdata = new_dat_as)
 
-smooth_year_p <- ggplot(smooth_preds_p, aes(x = year, y = est)) +
+png(here::here("outputs", "figs", "year_smooth_age_sex_int.png"),
+    height = 5, width = 5, units = "in", res = 200)
+ggplot(smooth_preds_as, aes(x = year, y = est, colour = sex)) +
   geom_line() +
   ggsidekick::theme_sleek() +
   labs(x = "Year", y = "Fork Length (mm)") +
@@ -1163,3 +1165,4 @@ smooth_year_p <- ggplot(smooth_preds_p, aes(x = year, y = est)) +
     breaks = seq(1915, 2015, by = 20),
     expand = c(0.02, 0.02)
   ) 
+dev.off()
