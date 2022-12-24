@@ -157,15 +157,6 @@ annual_dot <- ggplot(
   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
 
-## sample sizes through time
-dat %>% 
-  group_by(year, age_f) %>% 
-  tally() %>% 
-  ggplot(., aes(x = year, y = n)) +
-  geom_point() +
-  facet_wrap(~age_f)
-  glimpse()
-
 # export
 png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
     res = 250, units = "in")
@@ -197,6 +188,7 @@ comp_dat <-  dat_in %>%
       FALSE
     )
   ) %>%  
+  filter(dominant_age == TRUE) %>% 
   group_by(year) %>% 
   mutate(
     nn = n()
@@ -210,7 +202,7 @@ comp_dat <-  dat_in %>%
   distinct() %>% 
   arrange(year) 
 
-comp_dot <- ggplot(comp_dat %>% filter(dominant_age == TRUE)) +
+comp_dot <- ggplot(comp_dat) +
   geom_point(aes(x = year, y = ppn, shape = period)) +
   scale_shape_manual(values = shape_pal) +
   facet_wrap(~age_f, labeller = label_parsed) +
@@ -222,15 +214,6 @@ png(here::here("outputs", "figs", "annual_dot_comp.png"), width = 8, height = 5,
 comp_dot
 dev.off()
 
-ppn_dom <- comp_dat %>% 
-  group_by(dominant_age, year) %>% 
-  summarize(
-    sum_ppn = sum(ppn),
-    .groups = "drop"
-  ) %>% 
-  ungroup() %>% 
-  filter(dominant_age == TRUE) %>% 
-  pull(sum_ppn)
 
 
 # FIT MODEL  -------------------------------------------------------------------
@@ -240,18 +223,14 @@ fit <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
-              # mesh = dum_mesh,
               spatial = "off",
               spatiotemporal = "off",
               control = sdmTMBcontrol(
-                nlminb_loops = 2,
-                newton_loops = 2
-              ))
+                # nlminb_loops = 2,
+                newton_loops = 1
+              ),
+              silent = FALSE)
 sanity(fit)
-saveRDS(fit,
-        here::here(
-          "outputs", "model_fits", "fit.rds"
-        ))
 
 # check residuals
 sims <- simulate(fit, nsim = 250)
@@ -298,56 +277,6 @@ ggplot(resid_long) +
   ggsidekick::theme_sleek()
 dev.off()
 
-
-# COMPARE OUT OF SAMPLE PERFORMANCE --------------------------------------------
-
-# NOTE this comparison was made with identical constraints (k cannot be greater 
-# than 5 without leading to convergence issues for global smooth model) and 
-# in uncentered parameterization
-
-# fit <- sdmTMB(fl ~ 0 + s(yday_c, by = age, m = 2, k = 5) +
-#                 s(year, by = age, m = 2, k = 5) +
-#                 period + age + sex,
-#               dispformula = ~ 0 + period,
-#               data = dat,
-#               mesh = dum_mesh,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 nlminb_loops = 2,
-#                 newton_loops = 2
-#               ))
-
-# fit2 <- sdmTMB(fl ~ 0 + s(yday_c, m = 2) +
-#                 s(yday_c, by = age, m = 1) +
-#                 s(year, m = 2) +
-#                 s(year, by = age, m = 1) +
-#                 age + sex,
-#               dispformula = ~ 0 + period,
-#               data = dat,
-#               mesh = dum_mesh,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 nlminb_loops = 2,
-#                 newton_loops = 2
-#               ))
-
-
-# use average measures not used to fit model to determine whether global smooths 
-# should be used
-
-# adjust average data for missing years to match predictions format
-# dat_avg$fl <- dat_avg$mean_fl
-# dat_avg$year <- as.numeric(as.character(dat_avg$year_f))
-# dat_avg$yday_c <- 0
-# 
-# group_pred <- predict(fit, newdata = dat_avg, re_form = NA)
-# global_pred <- predict(fit2, newdata = dat_avg, re_form = NA)
-# 
-# Metrics::rmse(global_pred$est, dat_avg$fl_cm)
-# Metrics::rmse(group_pred$est, dat_avg$fl_cm)
-# group specific smooths have better predictions
 
 
 # CATEGORICAL PREDICTIONS  -----------------------------------------------------
@@ -650,6 +579,7 @@ oos_points <- ggplot(sim_oos) +
   facet_grid(age_f~sex, scales = "free_y", labeller = label_parsed) +
   labs(x = "Year", y = "Fork Length") +
   ggsidekick::theme_sleek() +
+  scale_x_continuous() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
         legend.position = "none")
 
