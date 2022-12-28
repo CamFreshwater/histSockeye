@@ -61,20 +61,32 @@ pred_mu <- predict(fit_lm, newdata = new_dat)
 
 abund_dat <- data.frame(
   age = c("42", "52", "53", "63"),
-  ppn = c(0.240, 0.181, 0.484, 0.0947)
+  ppn = c(0.240, 0.181, 0.484, 0.0950)
 ) %>% 
   mutate(
     abund = 10000 * ppn
   )
 
 # selectivity values for 10 mm size bins based on Kendall et al. 2009
-sel_foo <- function(l_i, beta, l_50 = 475) {
+sel_foo <- function(l_i, beta, l_50 = 500) {
   1 / (1 + exp(-beta * (l_i - l_50)))
 }
 
 fl_seq = c(seq(400, 600, by = 10), max(dat$fl + 5))
 sel_seq = sel_foo(fl_seq, beta = 0.1)
 plot(sel_seq ~ fl_seq)
+sel_plot_dat <- data.frame(
+  fl = fl_seq, 
+  selectivity = sel_seq
+)
+
+png(here::here("outputs", "figs", "selectivity_curve.png"), 
+    height = 7, width = 11, units = "in", res = 200)
+ggplot(sel_plot_dat %>% filter(fl < 650)) +
+  geom_line(aes(x = fl, y = selectivity)) +
+  ggsidekick::theme_sleek()
+dev.off()
+
 
 sel_dat <- data.frame(
   fl_bin =  cut(fl_seq, 
@@ -92,7 +104,7 @@ new_tbl <- new_dat %>%
 
 # simulate based on predicted mu and estimated sigma for each age and year
 set.seed(2023)
-nsims <- 500
+nsims <- 250
 dat_list <- vector(length = nsims, mode = "list")
 
 for (i in seq_len(nsims)) {
@@ -136,18 +148,6 @@ for (i in seq_len(nsims)) {
     ) %>% 
     unnest(cols = samp_fish) 
   
-  # comb_dat <- rbind(
-  #   dum %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "sims"),
-  #   samp_dat %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "samps")
-  # )
-  # 
-  # ggplot() +
-  #   geom_boxplot(data = comb_dat %>% 
-  #                  filter(sex == "female",
-  #                         year %in% seq(1920, 2000, by = 20)),
-  #                aes(x = as.factor(year), y = fl, fill = dat)) +
-  #   facet_wrap(~age)
-  
   # fit to samples
   fit_lm2 <- lm(sim_fl ~ year + age + sex, data = samp_dat)
   
@@ -161,12 +161,61 @@ for (i in seq_len(nsims)) {
 
 true_coef <- data.frame(
   coef = names(coef(fit_lm)),
-  est = coef(fit_lm) %>% as.numeric()
-)
+  est = summary(fit_lm)$coefficients[ , 1],
+  se = summary(fit_lm)$coefficients[ , 2] 
+) 
 coef_dat <- bind_rows(dat_list) 
+saveRDS(coef_dat, here::here("outputs", "model_fits", "sim_pars.rds"))
+
+
+png(here::here("outputs", "figs", "selectivity_boxplot_pars.png"), 
+    height = 7, width = 11, units = "in", res = 200)
 ggplot() +
-  geom_boxplot(data = coef_dat, aes(x = coef, y = est)) +
-  geom_point(data = true_coef, aes(x = coef, y = est), shape = 21, fill = "red") +
-  facet_wrap(~coef, scales = "free") 
+  geom_boxplot(data = coef_dat %>% 
+                 mutate(dat = "recovered"), 
+               aes(x = coef, y = est, fill = dat)) +
+  geom_point(data = true_coef %>% 
+                    mutate(dat = "true"), 
+                  aes(x = coef, y = est, fill = dat), 
+                  position = position_jitterdodge(),
+                  shape = 21, size = 2) +
+  facet_wrap(~coef, scales = "free") +
+  ggsidekick::theme_sleek()
+dev.off()
 
 
+## calculate difference in average size
+# true difference
+new_dat %>% 
+  mutate(
+    mu_fl = pred_mu %>% as.numeric()
+  ) %>% 
+  filter(year %in% c("1914", "2019")) %>% 
+  pivot_wider(names_from = year, values_from = mu_fl) %>% 
+  mutate(
+    mean_decline = (`2019` - `1914`),
+    mean_rel_decline = (`2019` - `1914`) / `1914`
+  )
+  
+mean_coefs <- coef_dat %>% 
+  group_by(coef) %>% 
+  summarize(
+    mean_est = mean(est)
+  )
+est_1914 <- mean_coefs$mean_est[1] + (mean_coefs$mean_est[6] * 1914) 
+est_2019 <- mean_coefs$mean_est[1] + (mean_coefs$mean_est[6] * 2019) 
+(est_1914 - est_2019) / est_1914
+
+
+# example time series
+comb_dat <- rbind(
+  dum %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "true"),
+  samp_dat %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "recovered")
+)
+
+ggplot() +
+  geom_boxplot(data = comb_dat %>%
+                 filter(sex == "female",
+                        year %in% seq(1920, 2000, by = 20)),
+               aes(x = as.factor(year), y = fl, fill = dat)) +
+  facet_wrap(~age)
