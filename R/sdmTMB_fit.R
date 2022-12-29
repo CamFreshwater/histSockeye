@@ -53,7 +53,8 @@ dat <- dat_in %>%
                          "Gilbert-Clemens",
                          "Bilton",
                          "Monkley Dump",
-                         "NFWD")
+                         "NFWD"),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
   ) %>% 
   droplevels()
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
@@ -218,8 +219,8 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-fit <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
-                s(year, by = age, m = 2) +
+fit <- sdmTMB(fl ~ s(yday_c, by = age_sex, m = 2) +
+                s(year, by = age_sex, m = 2) +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -281,18 +282,16 @@ dev.off()
 
 # CATEGORICAL PREDICTIONS  -----------------------------------------------------
 
-# replaced with effect sizes (next section)
+# replaced with effect sizes 
 new_dat <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),
   yday_c = 0,
-  year = 1969,#mean(dat$year),
-  # dummy spatial variables required
-  x = runif(1),
-  y = runif(1)
-) %>%
+  year = 1969
+  ) %>%
   mutate(
-    age_f = as.factor(age)
+    age_f = as.factor(age),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
   )
 levels(new_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
@@ -368,7 +367,7 @@ dev.off()
 # year effects (assuming fixed period)
 new_dat2 <- expand.grid(
   age = unique(dat$age),
-  sex = "female",
+  sex = unique(dat$sex),#"female",
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100),
   # dummy spatial variables required 
@@ -376,7 +375,8 @@ new_dat2 <- expand.grid(
   y = runif(1)
 ) %>% 
   mutate(
-    age_f = as.factor(age)
+    age_f = as.factor(age),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
   )
 levels(new_dat2$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
@@ -387,9 +387,11 @@ smooth_preds$up <- smooth_preds$est + (qnorm(0.975) * smooth_preds$est_se)
 
 
 smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  geom_line(aes(colour = sex)) +
+  geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
   ggsidekick::theme_sleek() +
+  scale_color_brewer(type = "qual") +
+  scale_fill_brewer(type = "qual") +
   labs(x = "Year", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
@@ -398,7 +400,7 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
   ) 
 
 
-png(here::here("outputs", "figs", "smooth_means_no_global_unconstrainedk.png"), 
+png(here::here("outputs", "figs", "year_smooth.png"), 
     height = 5, width = 8.5,
     units = "in", res = 250)
 smooth_year
@@ -408,7 +410,7 @@ dev.off()
 # year day effects
 new_dat3 <- expand.grid(
   age = unique(dat$age),
-  sex = "female",
+  sex = unique(dat$sex),#"female",
   period_b_cent = 0,
   period_m_cent = 0,
   period_n_cent = 0,
@@ -419,7 +421,8 @@ new_dat3 <- expand.grid(
   y = runif(1)
 ) %>% 
   mutate(
-    age_f = as.factor(age)
+    age_f = as.factor(age),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
   )
 levels(new_dat3$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
@@ -429,9 +432,11 @@ smooth_preds2$up <- smooth_preds2$est + (qnorm(0.975) * smooth_preds2$est_se)
 
 smooth_yday <- ggplot(smooth_preds2, 
        aes(x = yday_c, est)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
+  geom_line(aes(colour = sex)) +
+  geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
   ggsidekick::theme_sleek() +
+  scale_color_brewer(type = "qual") +
+  scale_fill_brewer(type = "qual") +
   labs(x = "Year Day", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
@@ -440,7 +445,7 @@ smooth_yday <- ggplot(smooth_preds2,
     expand = c(0.02, 0.02)
   )
 
-png(here::here("outputs", "figs", "yday_smooth_no_global.png"), 
+png(here::here("outputs", "figs", "yday_smooth.png"), 
     height = 5, width = 8.5,
     units = "in", res = 250)
 smooth_yday
@@ -452,12 +457,11 @@ dev.off()
 dat_avg_trim <- dat_avg %>%
   mutate(
     year = as.numeric(as.character(year_f)),
-    yday_c = 0
-  ) %>%
+    yday_c = 0) %>%
   select(
     year,
     mean_fl,
-    age_f, sex
+    age_f, sex#, age_sex
   ) %>%
   droplevels()
 
@@ -477,10 +481,7 @@ samp_day <- dat %>%
 new_dat4 <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),
-  year = unique(dat_avg_trim$year),
-  # dummy spatial variables required
-  x = runif(1),
-  y = runif(1)
+  year = unique(dat_avg_trim$year)
 ) %>%
   mutate(
     period = case_when(
@@ -490,7 +491,8 @@ new_dat4 <- expand.grid(
     period = fct_relevel(as.factor(period),
                          "Gilbert-Clemens",
                          "Bilton"),
-    age_f = as.factor(age)
+    age_f = as.factor(age),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
     ) 
 levels(new_dat4$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 new_dat4 <- new_dat4 %>% 
@@ -580,8 +582,7 @@ oos_points <- ggplot(sim_oos) +
   labs(x = "Year", y = "Fork Length") +
   ggsidekick::theme_sleek() +
   scale_x_continuous() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
-        legend.position = "none")
+  theme(legend.position = "none")
 
 png(here::here("outputs", "figs", "oos_preds.png"), 
     height = 8.5, width = 7.5,
@@ -595,10 +596,10 @@ dev.off()
 # differences between final year and a) time series average or b) beginning of 
 # time series for each age; control and don't control for period effects
 
-smooth_list <- split(smooth_preds, smooth_preds$age_f) 
-age_names <- c("42", "52", "53", "63")
+smooth_list <- split(smooth_preds, smooth_preds$age_sex) 
+age_sex_names <- levels(smooth_preds$age_sex)
 
-purrr::map2(smooth_list, age_names, function (x, y) {
+purrr::map2(smooth_list, age_sex_names, function (x, y) {
   ts <- x$est
   #calc time series mean for each iteration
   ts_mean = mean(ts)
@@ -620,13 +621,11 @@ fec_dat <- expand.grid(
   sex = "female",
   period = "NFWD",
   yday_c = 0,
-  year = seq(min(dat$year), max(dat$year), by = 1),
-  # dummy spatial variables required 
-  x = runif(1),
-  y = runif(1)
+  year = seq(min(dat$year), max(dat$year), by = 1)
 ) %>% 
   mutate(
-    age_f = as.factor(age)
+    age_f = as.factor(age),
+    age_sex = paste(sex, age, sep = "_") %>% as.factor()
   )
 levels(fec_dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
@@ -688,8 +687,7 @@ for (i in seq_len(n_sims)) {
     ) %>% 
     mutate(
       # convert to POH length in mm using inverse of equation in main manuscript
-      sim_hl =  (0.833 * pred_mu #* 10
-                 ) - 3.508,
+      sim_hl =  (0.833 * pred_mu) - 3.508,
       fec_beta = ifelse(age %in% c("42", "53"), 10.67, 9.77),
       fec_int = ifelse(age %in% c("42", "53"), 1811.9, 1244.7),
       sim_fec = (fec_beta * sim_hl - fec_int) / 1000
