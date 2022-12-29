@@ -219,8 +219,21 @@ dev.off()
 
 # FIT MODEL  -------------------------------------------------------------------
 
-fit <- sdmTMB(fl ~ s(yday_c, by = age_sex, m = 2) +
-                s(year, by = age_sex, m = 2) +
+# fit <- sdmTMB(fl ~ s(yday_c, by = age_sex, m = 2) +
+#                 s(year, by = age_sex, m = 2) +
+#                 age + sex,
+#               dispformula = ~ 0 + period,
+#               data = dat,
+#               spatial = "off",
+#               spatiotemporal = "off",
+#               control = sdmTMBcontrol(
+#                 # nlminb_loops = 2,
+#                 newton_loops = 1
+#               ),
+#               silent = FALSE)
+fit <- sdmTMB(fl ~ s(year, m = 2) +
+                 s(yday_c, by = age_sex, m = 2) +
+                 s(year, by = age_sex, m = 1) +
                 age + sex,
               dispformula = ~ 0 + period,
               data = dat,
@@ -369,11 +382,8 @@ new_dat2 <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),#"female",
   yday_c = 0,
-  year = seq(min(dat$year), max(dat$year), length = 100),
-  # dummy spatial variables required 
-  x = runif(1),
-  y = runif(1)
-) %>% 
+  year = seq(min(dat$year), max(dat$year), length = 100)
+  ) %>% 
   mutate(
     age_f = as.factor(age),
     age_sex = paste(sex, age, sep = "_") %>% as.factor()
@@ -415,10 +425,7 @@ new_dat3 <- expand.grid(
   period_m_cent = 0,
   period_n_cent = 0,
   yday_c = seq(-47, 65, length = 100),
-  year = 1969,
-  # dummy spatial variables required 
-  x = runif(1),
-  y = runif(1)
+  year = 1969
 ) %>% 
   mutate(
     age_f = as.factor(age),
@@ -815,49 +822,6 @@ png(here::here("outputs", "figs", "state_space.png"), width = 8, height = 9,
 cowplot::plot_grid(state_timeseries,
                    resid_timeseries,
                    resid_boxplot, nrow = 3)
-dev.off()
-
-
-# CHECK 1985 INFLUENCE ---------------------------------------------------------
-
-dum_mesh_85 <- make_mesh(dat %>% filter(!year == "1985"), c("x", "y"), 
-                         cutoff = 1000)
-
-fit_85 <- sdmTMB(fl_cm ~ s(yday_c, by = age, m = 2) +
-                   s(year, by = age, m = 2) +
-                   age + sex,
-                 dispformula = ~ 0 + period,
-                 data = dat %>% filter(!year == "1985"),
-                 mesh = dum_mesh_85,
-                 spatial = "off",
-                 spatiotemporal = "off",
-                 control = sdmTMBcontrol(
-                   nlminb_loops = 2,
-                   newton_loops = 2
-                 ))
-
-
-# smoothed predictions
-smooth_preds <- predict(fit_85, newdata = new_dat2, re_form = NA, se_fit = TRUE)
-smooth_preds$low <- smooth_preds$est + (qnorm(0.025) * smooth_preds$est_se)
-smooth_preds$up <- smooth_preds$est + (qnorm(0.975) * smooth_preds$est_se)
-
-
-smooth_year_85 <- ggplot(smooth_preds, aes(x = year, y = est)) +
-  geom_line() +
-  geom_ribbon(aes(ymin = low, ymax = up), alpha = 0.4) +
-  # geom_point(data = dat_avg_trim, aes(x = year, y = fl_cm)) +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (cm)") +
-  facet_wrap(~age_f, labeller = label_parsed) +
-  scale_x_continuous(
-    breaks = seq(1915, 2015, by = 20),
-    expand = c(0.02, 0.02)
-  ) 
-
-png(here::here("outputs", "figs", "smooth_85_removed.png"), 
-    height = 4, width = 5, units = "in", res = 250)
-smooth_year_85
 dev.off()
 
 
