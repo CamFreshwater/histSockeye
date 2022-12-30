@@ -1,4 +1,4 @@
-## Dummy simulation evaluate potential selectivity effects
+## Dummy simulation to evaluate potential selectivity effects
 # Dec. 23, 2022
 
 
@@ -59,6 +59,8 @@ new_dat <- expand.grid(
 )
 pred_mu <- predict(fit_lm, newdata = new_dat)
 
+
+# age-specific estimates of relative abundance based on mean age composition
 abund_dat <- data.frame(
   age = c("42", "52", "53", "63"),
   ppn = c(0.240, 0.181, 0.484, 0.0950)
@@ -72,29 +74,37 @@ sel_foo <- function(l_i, beta, l_50 = 500) {
   1 / (1 + exp(-beta * (l_i - l_50)))
 }
 
-fl_seq = c(seq(400, 600, by = 10), max(dat$fl + 5))
-sel_seq = sel_foo(fl_seq, beta = 0.1)
-plot(sel_seq ~ fl_seq)
+fl_seq <- c(seq(400, 600, by = 10), max(dat$fl + 5))
+sel_seq_gc <- sel_foo(fl_seq, beta = 0.075, l_50 = 500)
+sel_seq_bil <- sel_foo(fl_seq, beta = 0.075, l_50 = 450)
+plot(sel_seq_gc ~ fl_seq)
+points(sel_seq_bil ~ fl_seq, col = "red")
 sel_plot_dat <- data.frame(
   fl = fl_seq, 
-  selectivity = sel_seq
-)
+  gc_sel = sel_seq_gc,
+  bilton_sel = sel_seq_bil
+) 
 
 png(here::here("outputs", "figs", "selectivity_curve.png"), 
     height = 7, width = 11, units = "in", res = 200)
-ggplot(sel_plot_dat %>% filter(fl < 650)) +
-  geom_line(aes(x = fl, y = selectivity)) +
+sel_plot_dat %>% 
+  filter(fl < 650) %>% 
+  pivot_longer(
+    cols = c(gc_sel, bilton_sel), values_to = "selectivity", names_to = "period"
+  ) %>% 
+  ggplot(.) +
+  geom_line(aes(x = fl, y = selectivity, colour = period)) +
   ggsidekick::theme_sleek()
 dev.off()
 
 
-sel_dat <- data.frame(
-  fl_bin =  cut(fl_seq, 
-                breaks = c(seq(400, 600, by = 10), max(fl_seq)),
-                right = FALSE,
-                labels = FALSE),
-  sel = sel_seq
-) 
+sel_dat <- sel_plot_dat %>% 
+  mutate(
+    fl_bin =  cut(fl, 
+                  breaks = c(seq(400, 600, by = 10), max(fl)),
+                  right = FALSE,
+                  labels = FALSE)
+  )
 
 new_tbl <- new_dat %>% 
   mutate(
@@ -120,19 +130,29 @@ for (i in seq_len(nsims)) {
       fl_bin = cut(sim_fl, 
                    breaks = c(seq(400, 600, by = 10), max(sim_fl + 50)),
                    right = FALSE,
-                   labels = FALSE)
-    ) %>% 
-    left_join(., sel_dat, by = "fl_bin") 
+                   labels = FALSE),
+      period = case_when(
+        year < 1957 ~ "Gilbert-Clemens",
+        year > 1972 & year < 1994 ~ "Monkley Dump",
+        year > 1993 ~ "NFWD",
+        TRUE ~ "Bilton"
+      )
+    ) 
   
   # identify number of samples for each size bin
   pool_dum <- dum %>% 
-    group_by(year, fl_bin, sel) %>% 
+    group_by(year, fl_bin, period) %>%
     tally() %>%
+    left_join(., sel_dat, by = "fl_bin")  %>% 
     mutate(
       exp_rate = 0.75,
       sample_rate = 0.05,
       # remove selectivity when year > 1974
-      sel = ifelse(year > 1972, 1, sel), 
+      sel = case_when(
+        period == "Gilbert-Clemens" ~ gc_sel,
+        period == "Bilton" ~ bilton_sel,
+        TRUE ~ 1
+      ),
       n_samps = rbinom(1, n, sel * exp_rate * sample_rate)
     ) 
   
@@ -156,7 +176,6 @@ for (i in seq_len(nsims)) {
     coef = names(coef(fit_lm2)),
     est = coef(fit_lm2) %>% as.numeric()
   )
-  
 }
 
 true_coef <- data.frame(
@@ -207,15 +226,15 @@ est_2019 <- mean_coefs$mean_est[1] + (mean_coefs$mean_est[6] * 2019)
 (est_1914 - est_2019) / est_1914
 
 
-# example time series
-comb_dat <- rbind(
-  dum %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "true"),
-  samp_dat %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "recovered")
-)
-
-ggplot() +
-  geom_boxplot(data = comb_dat %>%
-                 filter(sex == "female",
-                        year %in% seq(1920, 2000, by = 20)),
-               aes(x = as.factor(year), y = fl, fill = dat)) +
-  facet_wrap(~age)
+# # example time series
+# comb_dat <- rbind(
+#   dum %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "true"),
+#   samp_dat %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "recovered")
+# )
+# 
+# ggplot() +
+#   geom_boxplot(data = comb_dat %>%
+#                  filter(sex == "female",
+#                         year %in% seq(1920, 2000, by = 20)),
+#                aes(x = as.factor(year), y = fl, fill = dat)) +
+#   facet_wrap(~age)
