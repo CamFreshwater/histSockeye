@@ -1,11 +1,11 @@
 # Fit sdmTMB model to century of Nass data 
-# Faster alternative to brms_fit while still accounting for variable dispersion
 # 1) Import Skip's first century of data and clean as necessary
-# 2) Estimate temporal trend using GAM and sdmTMB to account for changes in
+# 2) Estimate temporal trend using sdmTMB w/ smooths to account for changes in
 # variability with sampling regime
+# 3) Generate estimates of fixed effects, calculate overall decline in size, and
+# decline in fecundity
 # Created by C Freshwater Dec 23, 2021
-# Update w/ edited data
-# -------------------------------------------------
+# ------------------------------------------------------------------------------
 
 # install specific branch of sdmTMB that includes dispersion formula
 devtools::install_github("https://github.com/pbs-assess/sdmTMB",
@@ -41,7 +41,7 @@ dat <- dat_in %>%
     !is.na(yday),
     !is.na(fl)
   )  %>%
-  # Add a factor representing sample collection to visualize effects 
+  # Add a factor representing sample period 
   mutate(
     period = case_when(
       year < 1957 ~ "Gilbert-Clemens",
@@ -157,13 +157,10 @@ annual_dot <- ggplot(
   scale_fill_manual(values = fill_pal, name = "Dataset") +
   guides(fill = guide_legend(override.aes = list(shape = 21)))
 
-
-# export
 png(here::here("outputs", "figs", "annual_dot.png"), width = 8, height = 5,
     res = 250, units = "in")
 annual_dot
 dev.off()
-
 
 
 # AGE COMPOSITION --------------------------------------------------------------
@@ -216,21 +213,8 @@ comp_dot
 dev.off()
 
 
-
 # FIT MODEL  -------------------------------------------------------------------
 
-# fit <- sdmTMB(fl ~ s(yday_c, by = age_sex, m = 2) +
-#                 s(year, by = age_sex, m = 2) +
-#                 age + sex,
-#               dispformula = ~ 0 + period,
-#               data = dat,
-#               spatial = "off",
-#               spatiotemporal = "off",
-#               control = sdmTMBcontrol(
-#                 # nlminb_loops = 2,
-#                 newton_loops = 1
-#               ),
-#               silent = FALSE)
 fit <- sdmTMB(fl ~ s(year, m = 2) +
                  s(yday_c, by = age_sex, m = 2) +
                  s(year, by = age_sex, m = 1) +
@@ -240,20 +224,21 @@ fit <- sdmTMB(fl ~ s(year, m = 2) +
               spatial = "off",
               spatiotemporal = "off",
               control = sdmTMBcontrol(
-                # nlminb_loops = 2,
                 newton_loops = 1
               ),
               silent = FALSE)
+
+# check convergence
 sanity(fit)
 
 # check residuals
 sims <- simulate(fit, nsim = 250)
 dharma_sims <- sims %>% 
   dharma_residuals(fit)
-# looks good
 
+
+# look at residuals among sampling periods
 resid_mat <- sims - dat$fl
-
 resid_long <- resid_mat %>% 
   as.data.frame() %>% 
   cbind(dat %>% select(year, period), .)  %>% 
@@ -275,7 +260,8 @@ transition_years <- mean_dat_plotting %>%
 png(here::here("outputs", "figs", "gam_resid_ts.png"), width = 8, height = 5,
     res = 250, units = "in")
 ggplot(resid_dat) +
-  geom_pointrange(aes(x = year, y = mean_resid, ymin = low_resid, ymax = up_resid)) +
+  geom_pointrange(aes(x = year, y = mean_resid, ymin = low_resid, 
+                      ymax = up_resid)) +
   geom_hline(yintercept = 0, lty = 2) +
   geom_vline(xintercept = c(transition_years), color = "red") +
   labs(x = "Year", y = "GAM Residuals") +
@@ -295,7 +281,6 @@ dev.off()
 
 # CATEGORICAL PREDICTIONS  -----------------------------------------------------
 
-# replaced with effect sizes 
 new_dat <- expand.grid(
   age = unique(dat$age),
   sex = unique(dat$sex),
@@ -326,7 +311,6 @@ age_eff_dot <- fe_preds %>%
   scale_fill_brewer(palette = 1) +
   theme(legend.position = "none")
 
-
 sex_eff_dot <- fe_preds %>%
   filter(age == "42") %>%
   ggplot(.) +
@@ -336,6 +320,15 @@ sex_eff_dot <- fe_preds %>%
   labs(x = "Sex", y = "Estimated Mean Fork Length (mm)") +
   scale_fill_brewer(palette = 5, type = "seq") +
   theme(legend.position = "none")
+
+png(here::here("outputs", "figs", "main_effect.png"),
+    height = 3, width = 6.5,
+    units = "in", res = 250)
+cowplot::plot_grid(age_eff_dot,
+                   sex_eff_dot,
+                   ncol = 2)
+dev.off()
+
 
 # sigma estimates
 # note that model estimates are sd (not variance = sd^2)
@@ -365,22 +358,12 @@ period_sig_dot
 dev.off()
 
 
-# combine all fixed effects figs
-png(here::here("outputs", "figs", "main_effect.png"),
-    height = 3, width = 6.5,
-    units = "in", res = 250)
-cowplot::plot_grid(age_eff_dot,
-                   sex_eff_dot,
-                   ncol = 2)
-dev.off()
-
-
 # SMOOTH PREDICTIONS  ----------------------------------------------------------
 
-# year effects (assuming fixed period)
+# year effects
 new_dat2 <- expand.grid(
   age = unique(dat$age),
-  sex = unique(dat$sex),#"female",
+  sex = unique(dat$sex),
   yday_c = 0,
   year = seq(min(dat$year), max(dat$year), length = 100)
   ) %>% 
@@ -511,6 +494,7 @@ new_dat4 <- new_dat4 %>%
 # simulate predictions
 # components for calculating smooths
 source(here::here("R", "utils.R"))
+
 formula_no_sm <- remove_s_and_t2(fit$formula[[1]])
 X_ij <- model.matrix(formula_no_sm, data = dat)
 sm <- parse_smoothers(fit$formula[[1]], data = dat)
@@ -529,13 +513,13 @@ coef_list <- as.list(fit$sd_report, "Estimate")
 coef_vec <- c(coef_list$b_j, coef_list$b_disp_k, coef_list$bs,
               coef_list$ln_smooth_sigma)
 
-
 n_sims <- 1000
 cov_sim <- MASS::mvrnorm(n_sims, coef_vec, cov)
 b1_j <- cov_sim[ , grep("b_j", colnames(cov))] #fixed effect pars
 bs <- cov_sim[ , grep("bs", colnames(cov))] # fixed effect smooths
 ssdr <- summary(fit$sd_report)
-b_smooth <- ssdr[rownames(ssdr) == "b_smooth", "Estimate"] %>% as.numeric() #random smooths
+#random smooths
+b_smooth <- ssdr[rownames(ssdr) == "b_smooth", "Estimate"] %>% as.numeric() 
 
 sim_list_oos <- vector(mode = "list", length = n_sims)
 
@@ -569,7 +553,6 @@ for (i in seq_len(n_sims)) {
 sim_oos <- sim_list_oos %>%
   bind_rows() %>%
   rename(obs = mean_fl,
-         # obs = fl_cm,
          est = pred_mu) %>% 
   group_by(age_f, sex, year, period, obs) %>% 
   summarize(low = quantile(est, 0.025),
@@ -858,7 +841,6 @@ new_dat_p <- expand.grid(
     period = "Gilbert-Clemens"
   )
 
-# insufficient vector memory to generate confidence intervals
 smooth_preds_p <- predict(fit_p, 
                           newdata = new_dat_p)
 
@@ -900,7 +882,6 @@ purrr::map2(smooth_list_p, age_names, function (x, y) {
 
 
 ## simulate and attempt to recover pars
-
 sims_p <- simulate(fit_p, 50)
 fix_pars_est <- tidy(fit_p, effects = "fixed") %>% 
   mutate(model = "period")
@@ -1001,60 +982,7 @@ ggplot() +
                   aes(x = term, y = estimate, ymin = lo, ymax = up, 
                       fill = model, colour = model),
                   position = position_jitterdodge(),
-                  # position = position_dodge(width = 0.85),
                   shape = 21) +
   facet_wrap(~term, scales = "free") +
   ggsidekick::theme_sleek()
-dev.off()
-
-
-
-# FIT SUPP MODEL 2 -------------------------------------------------------------
-
-# fit alternative model with unique age-sex effects
-dat$age_sex <- as.factor(paste(dat$age, dat$sex, sep = "_"))
-
-fit_as <- sdmTMB(fl ~ s(yday_c, by = age, m = 2) +
-                  s(year, by = age_sex, m = 2) +
-                  period +
-                  age_sex,
-                dispformula = ~ 0 + period,
-                data = dat,
-                spatial = "off",
-                spatiotemporal = "off",
-                control = sdmTMBcontrol(
-                  nlminb_loops = 2,
-                  newton_loops = 2
-                )
-)
-sanity(fit_as)
-
-
-# generate annual predictions
-new_dat_as <- expand.grid(
-  age = unique(dat$age),
-  sex = unique(dat$sex),
-  yday_c = 0,
-  year = seq(min(dat$year), max(dat$year), length = 100)
-) %>% 
-  mutate(
-    age_f = as.factor(age),
-    period = "Gilbert-Clemens",
-    age_sex = as.factor(paste(age, sex, sep = "_"))
-  ) 
-
-smooth_preds_as <- predict(fit_as, 
-                          newdata = new_dat_as)
-
-png(here::here("outputs", "figs", "year_smooth_age_sex_int.png"),
-    height = 5, width = 5, units = "in", res = 200)
-ggplot(smooth_preds_as, aes(x = year, y = est, colour = sex)) +
-  geom_line() +
-  ggsidekick::theme_sleek() +
-  labs(x = "Year", y = "Fork Length (mm)") +
-  facet_wrap(~age_f, labeller = label_parsed) +
-  scale_x_continuous(
-    breaks = seq(1915, 2015, by = 20),
-    expand = c(0.02, 0.02)
-  ) 
 dev.off()

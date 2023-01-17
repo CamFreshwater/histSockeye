@@ -1,4 +1,6 @@
-## Dummy simulation to evaluate potential selectivity effects
+## Dummy simulation to evaluate potential selectivity effects using published
+# selectivity relationships from Todd and Larkin 1971 and Kendall et al. 2009
+# See associated supplement for details
 # Dec. 23, 2022
 
 
@@ -48,7 +50,7 @@ dat <- dat_in %>%
 levels(dat$age_f) <- c("4[2]", "5[2]", "5[3]", "6[3]")
 
 
-# fit bare bones model for estimates of age, sex and year effects
+# fit minimal model for estimates of age, sex and year effects
 fit_lm <- lm(fl ~ year + age + sex, data = dat)
 
 # generate mean estimates for each age-sex-year
@@ -69,13 +71,14 @@ abund_dat <- data.frame(
     abund = 10000 * ppn
   )
 
-# selectivity values for 10 mm size bins based on Kendall et al. 2009
 sel_foo <- function(l_i, beta, l_50 = 500) {
   1 / (1 + exp(-beta * (l_i - l_50)))
 }
 
 fl_seq <- c(seq(400, 600, by = 10), max(dat$fl + 5))
+# selectivity values for 10 mm size bins based on Kendall et al. 2009
 sel_seq_gc <- sel_foo(fl_seq, beta = 0.075, l_50 = 500)
+# selectivity values for 10 mm size bins based on Todd and Larkin 1971
 sel_seq_bil <- sel_foo(fl_seq, beta = 0.075, l_50 = 450)
 plot(sel_seq_gc ~ fl_seq)
 points(sel_seq_bil ~ fl_seq, col = "red")
@@ -225,16 +228,3 @@ est_1914 <- mean_coefs$mean_est[1] + (mean_coefs$mean_est[6] * 1914)
 est_2019 <- mean_coefs$mean_est[1] + (mean_coefs$mean_est[6] * 2019) 
 (est_1914 - est_2019) / est_1914
 
-
-# # example time series
-# comb_dat <- rbind(
-#   dum %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "true"),
-#   samp_dat %>% select(year, age, sex, fl = sim_fl) %>% mutate(dat = "recovered")
-# )
-# 
-# ggplot() +
-#   geom_boxplot(data = comb_dat %>%
-#                  filter(sex == "female",
-#                         year %in% seq(1920, 2000, by = 20)),
-#                aes(x = as.factor(year), y = fl, fill = dat)) +
-#   facet_wrap(~age)
