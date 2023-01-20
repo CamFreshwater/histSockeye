@@ -66,6 +66,9 @@ names(fill_pal) <- c("annual average", "individual measurements")
 shape_pal <- c(21, 22, 23, 24)
 names(shape_pal) <- unique(dat$period)
 
+sex_pal <- c("#f4a582", "#404040")
+names(sex_pal) <- c("female", "male")
+
 
 # RAW DATA PLOTS ---------------------------------------------------------------
 
@@ -383,8 +386,8 @@ smooth_year <- ggplot(smooth_preds, aes(x = year, y = est)) +
   geom_line(aes(colour = sex)) +
   geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
   ggsidekick::theme_sleek() +
-  scale_color_brewer(type = "qual") +
-  scale_fill_brewer(type = "qual") +
+  scale_color_manual(values = sex_pal) +
+  scale_fill_manual(values = sex_pal) +
   labs(x = "Year", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
@@ -425,8 +428,8 @@ smooth_yday <- ggplot(smooth_preds2,
   geom_line(aes(colour = sex)) +
   geom_ribbon(aes(ymin = low, ymax = up, fill = sex), alpha = 0.4) +
   ggsidekick::theme_sleek() +
-  scale_color_brewer(type = "qual") +
-  scale_fill_brewer(type = "qual") +
+  scale_color_manual(values = sex_pal) +
+  scale_fill_manual(values = sex_pal) +
   labs(x = "Year Day", y = "Fork Length (mm)") +
   facet_wrap(~age_f, labeller = label_parsed) +
   scale_x_continuous(
