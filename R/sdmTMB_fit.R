@@ -231,6 +231,9 @@ fit <- sdmTMB(fl ~ s(year, m = 2) +
               ),
               silent = FALSE)
 
+saveRDS(fit, here::here("outputs", "model_fits", "fit.rds"))
+
+
 # check convergence
 sanity(fit)
 
@@ -355,7 +358,7 @@ period_sig_dot <- ggplot(period_sig) +
   theme(legend.position = "none")
 
 png(here::here("outputs", "figs", "sigma_ests.png"), 
-    height = 4, width = 5,
+    height = 3.6, width = 4,
     units = "in", res = 250)
 period_sig_dot
 dev.off()
@@ -718,7 +721,7 @@ diff_fecundity <- sim_dat_fec %>%
 
 
 png(here::here("outputs", "figs", "fecundity_diff.png"), 
-    height = 4, width = 5, units = "in", res = 250)
+    height = 3.6, width = 4, units = "in", res = 250)
 ggplot(diff_fecundity) +
   geom_pointrange(aes(x = age_f, y = rel_mean, ymin = rel_low, 
                       ymax = rel_up)) +
